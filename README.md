@@ -1,4 +1,4 @@
-# Vaes-fashion-compatibility
+# VAEs- Fashion compatibility
 
 
 In the UPC datahon, MANGO presented a challenge involving the creation of new outfits. Our team successfully tackled this challenge by devising a solution that constructs outfits iteratively based on the probability that two products complement each other. UPC Datahon Solution.
