@@ -1,0 +1,4 @@
+data:
+  outfits_path: './data/tabular/outfit_data.csv'
+  products_path: './data/tabular/product_data.csv'
+
