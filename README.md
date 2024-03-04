@@ -6,4 +6,4 @@ In the UPC datahon, MANGO presented a challenge involving the creation of new ou
 
 While the initial solution showed promise, it encountered robustation problems. In response, this project seeks to enhance the solution using variational autoencoders. As detailed in the accompanying report, our improved approach aims to deliver a viable solution for both customers and businesses. Key considerations include the speed of predictions and the ability to generate outfits in various sizes.
 
-For additional details, please refer to the full report.
+For additional details, please refer to the [full report](https://github.com/Francesco7D2/vaes-fashion-compatibility/blob/main/reports/report.pdf)
