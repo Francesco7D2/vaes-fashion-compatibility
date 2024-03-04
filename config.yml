@@ -1,4 +1,21 @@
 data:
   outfits_path: './data/tabular/outfit_data.csv'
   products_path: './data/tabular/product_data.csv'
+  configurations_base:
+    - - 'Dresses, jumpsuits and Complete set'
+      - 'Footwear'
+      - 'Earrings'
+    - - 'Tops'
+      - 'Bottoms'
+      - 'Footwear'
+      - 'Earrings'
+
+  optional_products:
+    - 'Outerwear'
+    - 'Bags'
+    - 'Glasses'
+    - 'Ring'
+    - 'Necklace'
+    
+   
 
