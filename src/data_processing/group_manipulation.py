@@ -163,5 +163,40 @@ def create_configurations(configurations_base, optional_products):
 
 
 
+def select_valid_outfits(df_outfit_products, feature_name, code_sets, name_set, all_configurations):
+    """
+    Selects valid outfits based on specified feature and configurations.
+
+    Parameters:
+    - feature_name (str): The name of the feature to consider.
+    - code_sets (str or list): Column name or list of column names to group by.
+    - name_set (str): Name for the set to be used in the result DataFrame.
+    - all_configurations (list): List of all possible configurations.
+
+    Returns:
+    - pd.DataFrame: DataFrame containing selected valid outfits.
+
+    Example:
+    select_valid_outfits('color', 'code_column', 'outfit_set', [['A'], ['B'], ['C']])
+    """
+    result_df = get_grouped_counts_feature_values(df_outfit_products, code_sets, name_set, feature_name)
+
+    selected_outfits = []
+    configurations_count = {}
+
+    for size in range(3, 9):
+        outfit_products_list = result_df[result_df['outfit_size'] == size][f'{code_sets}_{feature_name}_tuple']
+        for out_prod in list(outfit_products_list)[0]:
+            for i, conf in enumerate(all_configurations):
+                if Counter(out_prod[1]) == Counter(conf):
+                    configurations_count[i] = configurations_count.get(i, 0) + 1
+                    selected_outfits.append(out_prod[0])
+
+
+    columns = ['cod_outfit', 'cod_modelo_color', 'des_product_class', 'des_filename']
+    df_outfit_products_sel = df_outfit_products[df_outfit_products['cod_outfit'].isin(selected_outfits)][columns]
+
+    return df_outfit_products_sel, configurations_count
+
 
 
