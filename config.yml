@@ -4,6 +4,8 @@ data:
   valid_outfits_path: './data/processed/valid_outfits.csv'
   outfits_w_products_path : './data/processed/outfit_w_products.csv'
   outfit_image_arrays_path : './data/processed/outfit_image_arrays.pkl'
+
+  
   configurations_base:
     - - 'Dresses, jumpsuits and Complete set'
       - 'Footwear'
@@ -22,5 +24,14 @@ data:
     
   image_height : 128
   image_width: 96
-   
+
+training: 
+  train_dataset_path : './data/processed/train_dataset.tfrecord'
+  train_sample_path : './data/processed/train_sample.tfrecord'
+  train_sample_indices : 
+    - 45
+    - 28
+    - 896
+    - 912
+  batch_size: 32
 
