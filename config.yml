@@ -28,10 +28,13 @@ data:
 training: 
   train_dataset_path : './data/processed/train_dataset.tfrecord'
   train_sample_path : './data/processed/train_sample.tfrecord'
+  epoch_images_path : './figures/epoch_images_256'
+  model_weights_path : './models/vae_weights_256.h5'
+  model_data_path  : './models/vae_data_256.pkl'
   train_sample_indices : 
     - 45
     - 28
     - 896
     - 912
   batch_size: 32
-
+  epochs: 400

@@ -44,3 +44,19 @@ def create_white_image(width, height):
     white_image = tf.expand_dims(white_image, 0)
     return white_image
 
+def _bytes_feature(value):
+    # Ensure that the image data is of type uint8
+    value = tf.image.convert_image_dtype(value, dtype=tf.uint8)
+
+    # Remove the singleton batch dimension if it exists
+    value = tf.squeeze(value, axis=0) if len(value.shape) == 4 else value
+
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[tf.io.encode_jpeg(value).numpy()]))
+
+
+def parse_tfrecord_fn(example_proto):
+    feature_description = {'image': tf.io.FixedLenFeature([], tf.string)}
+    example = tf.io.parse_single_example(example_proto, feature_description)
+    img = tf.io.decode_jpeg(example['image'], channels=3)
+    return img
+
