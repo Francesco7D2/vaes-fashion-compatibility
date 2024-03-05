@@ -30,3 +30,5 @@ def get_des_product_class(row: pd.Series) -> pd.Series:
         return row['des_product_type']
     else:
         return row['des_product_category']
+        
+        

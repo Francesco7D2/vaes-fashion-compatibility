@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 
 import pandas as pd
-
-
-
-import sys
 import os
+import sys
 
-sys.path.append('/home/francesco/vaes-fashion-compatibility/src/utils')
-sys.path.append('/home/francesco/vaes-fashion-compatibility/src/data_processing')
+current_dir = os.getcwd()
 
+utils_path = os.path.join(current_dir, 'src', 'utils')
+data_processing_path = os.path.join(current_dir, 'src', 'data_processing')
+
+sys.path.append(utils_path)
+sys.path.append(data_processing_path)
 
 from group_manipulation import select_valid_outfits
 from product_processing import get_des_product_class
@@ -21,7 +22,7 @@ FEATURE_NAME = 'des_product_class'
 CODE_SETS = 'cod_outfit'
 NAME_SET = 'outfit'
 
-def create_save_valid_outfits():
+def build_valid_outfits_df():
     config = load_config()
     df_outfits = pd.read_csv(config['data']['outfits_path'])
     df_products = pd.read_csv(config['data']['products_path'])
@@ -37,9 +38,10 @@ def create_save_valid_outfits():
     all_configurations = create_configurations(configurations_base, optional_products)
 
     selected_outfits_df, _ = select_valid_outfits(df_outfit_products, FEATURE_NAME, CODE_SETS, NAME_SET, all_configurations)
+    selected_outfits_df['des_filename'] = selected_outfits_df['des_filename'].str.replace('datathon', './data')
 
     selected_outfits_df.to_csv(config['data']['valid_outfits_path'])
 
 if __name__ == "__main__":
-    create_save_valid_outfits()
+    build_valid_outfits_df()
 

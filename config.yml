@@ -1,7 +1,9 @@
 data:
   outfits_path: './data/tabular/outfit_data.csv'
   products_path: './data/tabular/product_data.csv'
-  valid_outfits_path: './data/processed/outfit_products_sel.csv'
+  valid_outfits_path: './data/processed/valid_outfits.csv'
+  outfits_w_products_path : './data/processed/outfit_w_products.csv'
+  outfit_image_arrays_path : './data/processed/outfit_image_arrays.pkl'
   configurations_base:
     - - 'Dresses, jumpsuits and Complete set'
       - 'Footwear'
@@ -18,5 +20,7 @@ data:
     - 'Ring'
     - 'Necklace'
     
+  image_height : 128
+  image_width: 96
    
 
