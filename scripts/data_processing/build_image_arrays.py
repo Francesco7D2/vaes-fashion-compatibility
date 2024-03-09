@@ -117,7 +117,7 @@ def build_image_arrays(compact=False):
                                  foot_image, bags_image, glasses_image,
                                  earring_image, ring_image, necklace_image], axis=2)
 
-            feature = {'image': _bytes_feature(img.numpy())}
+            feature = {'image': _bytes_feature(img.numpy() / 255.)}
             example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
             writer.write(example_proto.SerializeToString())
             
