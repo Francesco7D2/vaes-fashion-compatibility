@@ -2,19 +2,23 @@
 
 import argparse
 import json
+import os
 import pickle
 import time
+
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 import pandas as pd
 import tensorflow as tf
 
 from src.data_processing.image_processing import parse_tfrecord_fn
 from src.models.vae256 import Conv_VAE
+from src.utils.device_utilities import configure_tensorflow
 from src.utils.setup_utilities import ensure_parent, file_digest, load_config
 from src.utils.train_utilities import generate_and_save_images, train_step
 
 
-def train_outfit_embeddings(config_path=None):
+def train_outfit_embeddings(config_path=None, device=None):
     config = load_config(config_path)
     data, training = config["data"], config["training"]
     for key in ("epochs", "batch_size", "checkpoint_every"):
@@ -23,6 +27,8 @@ def train_outfit_embeddings(config_path=None):
             raise ValueError(f"{key} must be a positive integer")
     if (data["image_height"], data["image_width"]) != (128, 96):
         raise ValueError("The original model requires 128 x 96 product images")
+    device_report = configure_tensorflow(device or training.get("device", "auto"))
+    print(f"TensorFlow device: {json.dumps(device_report)}", flush=True)
     tf.keras.utils.set_random_seed(training.get("seed", 42))
     dataset = tf.data.TFRecordDataset(training["train_dataset_path"]).map(
         parse_tfrecord_fn
@@ -107,4 +113,6 @@ def train_outfit_embeddings(config_path=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config")
-    train_outfit_embeddings(parser.parse_args().config)
+    parser.add_argument("--device", choices=("auto", "cpu", "gpu"))
+    args = parser.parse_args()
+    train_outfit_embeddings(args.config, args.device)

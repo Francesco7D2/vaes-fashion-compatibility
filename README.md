@@ -2,20 +2,47 @@
 
 A research prototype following the [UPC Datathon project](https://github.com/Francesco7D2/datathon-2023-fashion-compatibility). It learns to reconstruct complete outfits from a compressed representation of product images.
 
-**Current scope:** preprocessing, outfit-image TFRecords, a convolutional stochastic autoencoder, embedding export, frequency-weighted candidate generation, exact nearest-neighbor scoring, and product-conditioned top-k recommendations. The missing stage was recovered from [the second repository's prediction notebook](https://github.com/Francesco7D2/MANGO-fashion-compatibility/blob/c61f8692ca31203ab067fde33949f38abd60661a/notebooks/outfit_predictions.ipynb). See [recommendation instructions](docs/recommendation.md) and [report updates with measured counts](docs/report-update.md).
-
-Read [the project walkthrough](docs/project-walkthrough.md) for architecture, report/code discrepancies, and research next steps.
+**Current scope:** preprocessing, outfit-image TFRecords, a convolutional stochastic autoencoder, embedding export, frequency-weighted candidate generation, exact nearest-neighbor scoring, and product-conditioned top-k recommendations. The missing stage was recovered from [the second repository's prediction notebook](https://github.com/Francesco7D2/MANGO-fashion-compatibility/blob/c61f8692ca31203ab067fde33949f38abd60661a/notebooks/outfit_predictions.ipynb).
 
 ## Setup
 
-Use Python 3.12 (tested with TensorFlow 2.16.2). From the repository root:
+Use Python 3.11 on Apple silicon so Apple's Metal plugin is available. Python 3.12 remains supported for CPU execution on all platforms. From the repository root on macOS:
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+uv python install 3.11
+uv venv --python 3.11 .venv-metal
+source .venv-metal/bin/activate
+uv pip install -r requirements.txt
 python -m pytest -q
 ```
+
+On Linux, native Windows, or a CPU-only macOS environment, create and activate a normal `.venv` using your supported Python 3.11 or 3.12 interpreter. Windows activation is `.venv\\Scripts\\activate` in Command Prompt or `.venv\\Scripts\\Activate.ps1` in PowerShell.
+
+Check the TensorFlow device before a long run:
+
+```bash
+python -m scripts.check_device
+```
+
+If `auto` reports CPU when you expect a GPU, run `python -m scripts.check_device --device gpu`. It exits with a clear error rather than silently starting a long CPU training run.
+
+You can enforce GPU use for the long stages as well:
+
+```bash
+python -m scripts.run_pipeline --from-stage train --to-stage index --device gpu
+```
+
+`training.device` in `config.yml` accepts `auto`, `cpu`, or `gpu`. `auto` selects the first TensorFlow GPU and otherwise uses the CPU. Training and index building print the selected device before doing expensive work.
+
+On Apple silicon, `requirements.txt` installs Apple's `tensorflow-metal` plugin. On Linux with an NVIDIA GPU—or Windows using WSL2 with NVIDIA support—install the CUDA extras instead:
+
+```bash
+python -m pip install -r requirements-accelerated.txt
+```
+
+Native Windows uses TensorFlow CPU with this TensorFlow version. GPU training on Windows should use WSL2. The code itself uses `pathlib`, subprocess argument lists, atomic file replacement, and SQLite APIs that work across macOS, Linux, and Windows.
+
+Platform setup references: [Apple tensorflow-metal](https://developer.apple.com/metal/tensorflow-plugin/) and [TensorFlow pip installation](https://www.tensorflow.org/install/pip).
 
 To open the inspection notebooks locally, install Jupyter once and start it:
 
@@ -107,7 +134,7 @@ The historical `ELBO_list` is replaced by accurately named positive reconstructi
 
 **Rebuild both TFRecords and retrain.** Old records may have lost information through quantization; normalizing them at read time cannot repair it. Report figures and notebook outputs are historical, not validated results of this refactor. The recovered CSVs confirm 3,164 corrected selected outfits versus 2,303 under the old rules. No full-data accuracy or compatibility improvement is claimed.
 
-The second repository includes ELBO-based notebook variants. The absence of KL described above applies to this executable baseline; it does not establish that your historical report used the same loss. See the report-update document before changing historical claims.
+The second repository includes ELBO-based notebook variants. The absence of KL described above applies to this executable baseline; it does not establish that your historical report used the same loss.
 
 ## Inspection notebooks
 

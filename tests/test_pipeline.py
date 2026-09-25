@@ -161,7 +161,11 @@ def test_csv_to_records_pipeline(tmp_path):
     report = validation_frame(config_path)
     assert report.status.eq("PASS").all(), report[report.status != "PASS"]
     dry_run = run_pipeline(
-        config_path, from_stage="images", to_stage="candidates", dry_run=True
+        config_path,
+        from_stage="images",
+        to_stage="candidates",
+        dry_run=True,
+        device="cpu",
     )
     assert dry_run["status"] == "DRY_RUN"
     assert [stage["name"] for stage in dry_run["stages"]] == [
@@ -169,6 +173,10 @@ def test_csv_to_records_pipeline(tmp_path):
         "train",
         "candidates",
     ]
+    train_command = next(
+        stage["command"] for stage in dry_run["stages"] if stage["name"] == "train"
+    )
+    assert train_command[-2:] == ["--device", "cpu"]
     # Checkpoint provenance is checked before attempting to load model weights.
     weights_path = Path(paths["model_weights_path"])
     with weights_path.open("ab") as stream:

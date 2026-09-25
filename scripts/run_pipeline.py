@@ -20,7 +20,11 @@ STAGES = (
 
 
 def run_pipeline(
-    config_path=None, from_stage="select", to_stage="index", dry_run=False
+    config_path=None,
+    from_stage="select",
+    to_stage="index",
+    dry_run=False,
+    device=None,
 ):
     """Run inclusive stage bounds; each stage gets a fresh process."""
     names = [name for name, _ in STAGES]
@@ -37,12 +41,15 @@ def run_pipeline(
         "from_stage": from_stage,
         "to_stage": to_stage,
         "status": "DRY_RUN" if dry_run else "RUNNING",
+        "device_override": device,
         "stages": [],
     }
     for name, module in selected:
         command = [sys.executable, "-m", module]
         if config_path:
             command.extend(["--config", str(Path(config_path).resolve())])
+        if device and name in {"train", "index"}:
+            command.extend(["--device", device])
         print(f"\n[{name}] {' '.join(command)}", flush=True)
         if dry_run:
             run["stages"].append(
@@ -89,8 +96,9 @@ def main():
     parser.add_argument("--from-stage", choices=names, default=names[0])
     parser.add_argument("--to-stage", choices=names, default=names[-1])
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--device", choices=("auto", "cpu", "gpu"))
     args = parser.parse_args()
-    run_pipeline(args.config, args.from_stage, args.to_stage, args.dry_run)
+    run_pipeline(args.config, args.from_stage, args.to_stage, args.dry_run, args.device)
 
 
 if __name__ == "__main__":

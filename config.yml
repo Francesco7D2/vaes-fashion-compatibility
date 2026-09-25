@@ -25,6 +25,7 @@ data:
   image_width: 96
 
 training:
+  device: 'auto'
   train_dataset_path: './data/processed/train_dataset.tfrecord'
   train_sample_path: './data/processed/train_sample.tfrecord'
   epoch_images_path: './figures/epoch_images_256'

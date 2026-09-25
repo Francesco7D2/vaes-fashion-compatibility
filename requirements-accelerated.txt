@@ -1,0 +1,2 @@
+-r requirements.txt
+tensorflow[and-cuda]>=2.16,<2.17; sys_platform == "linux" and platform_machine == "x86_64"

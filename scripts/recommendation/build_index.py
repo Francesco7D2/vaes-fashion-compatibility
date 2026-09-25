@@ -2,7 +2,10 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
+
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 
 import numpy as np
 import pandas as pd
@@ -17,7 +20,7 @@ from src.recommendation.ranking import nearest_neighbors, write_index
 from src.utils.setup_utilities import ensure_parent, file_digest, load_config
 
 
-def build_index(config_path=None):
+def build_index(config_path=None, device=None):
     config = load_config(config_path)
     data, training, rec = config["data"], config["training"], config["recommendation"]
     with open(rec["generation_manifest_path"]) as stream:
@@ -79,7 +82,10 @@ def build_index(config_path=None):
 
     from src.models.vae256 import Conv_VAE
     from src.recommendation.encoding import encode_candidates, encode_reference
+    from src.utils.device_utilities import configure_tensorflow
 
+    device_report = configure_tensorflow(device or training.get("device", "auto"))
+    print(f"TensorFlow device: {json.dumps(device_report)}", flush=True)
     model = Conv_VAE()
     model(tf.zeros((1, 128, 960, 3)))
     model.load_weights(training["model_weights_path"])
@@ -136,4 +142,6 @@ def build_index(config_path=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config")
-    build_index(parser.parse_args().config)
+    parser.add_argument("--device", choices=("auto", "cpu", "gpu"))
+    args = parser.parse_args()
+    build_index(args.config, args.device)
