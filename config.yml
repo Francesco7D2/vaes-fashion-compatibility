@@ -2,10 +2,9 @@ data:
   outfits_path: './data/tabular/outfit_data.csv'
   products_path: './data/tabular/product_data.csv'
   valid_outfits_path: './data/processed/valid_outfits.csv'
-  outfits_w_products_path : './data/processed/outfit_w_products.csv'
-  outfit_image_arrays_path : './data/processed/outfit_image_arrays.pkl'
+  outfits_w_products_path: './data/processed/outfit_w_products.csv'
 
-  
+
   configurations_base:
     - - 'Dresses, jumpsuits and Complete set'
       - 'Footwear'
@@ -21,20 +20,23 @@ data:
     - 'Glasses'
     - 'Ring'
     - 'Necklace'
-    
-  image_height : 128
+
+  image_height: 128
   image_width: 96
 
-training: 
-  train_dataset_path : './data/processed/train_dataset.tfrecord'
-  train_sample_path : './data/processed/train_sample.tfrecord'
-  epoch_images_path : './figures/epoch_images_256'
-  model_weights_path : './models/vae_weights_256.h5'
-  model_data_path  : './models/vae_data_256.pkl'
-  train_sample_indices : 
+training:
+  train_dataset_path: './data/processed/train_dataset.tfrecord'
+  train_sample_path: './data/processed/train_sample.tfrecord'
+  epoch_images_path: './figures/epoch_images_256'
+  model_weights_path: './models/vae_256.weights.h5'
+  model_data_path: './models/vae_data_256.pkl'
+  train_sample_indices:
     - 45
     - 28
     - 896
     - 912
   batch_size: 32
   epochs: 400
+  learning_rate: 0.0001
+  seed: 42
+  checkpoint_every: 20

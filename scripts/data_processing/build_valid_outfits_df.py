@@ -1,47 +1,51 @@
-# -*- coding: utf-8 -*-
+"""Join product metadata and retain outfits matching the configured rules."""
+
+from pathlib import Path
 
 import pandas as pd
-import os
-import sys
 
-current_dir = os.getcwd()
+from src.data_processing.group_manipulation import (
+    create_configurations,
+    select_valid_outfits,
+)
+from src.data_processing.product_processing import get_des_product_class
+from src.utils.setup_utilities import ensure_parent, load_config
 
-utils_path = os.path.join(current_dir, 'src', 'utils')
-data_processing_path = os.path.join(current_dir, 'src', 'data_processing')
 
-sys.path.append(utils_path)
-sys.path.append(data_processing_path)
+def build_valid_outfits_df(config_path=None):
+    data = load_config(config_path)["data"]
+    outfits = pd.read_csv(data["outfits_path"], dtype={"cod_modelo_color": str})
+    products = pd.read_csv(data["products_path"], dtype={"cod_modelo_color": str})
+    merged = outfits.merge(
+        products,
+        on="cod_modelo_color",
+        how="left",
+        validate="many_to_one",
+        indicator=True,
+    )
+    if (merged["_merge"] != "both").any():
+        raise ValueError("Some outfit products have no product metadata")
+    merged["des_product_class"] = merged.apply(get_des_product_class, axis=1)
+    configurations = create_configurations(
+        data["configurations_base"], data["optional_products"]
+    )
+    selected, _ = select_valid_outfits(
+        merged, "des_product_class", "cod_outfit", "outfit", configurations
+    )
+    data_root = Path(data["outfits_path"]).parent.parent
 
-from group_manipulation import select_valid_outfits
-from product_processing import get_des_product_class
-from group_manipulation import create_configurations
-from group_manipulation import create_combinations
-from setup_utilities import load_config
+    def image_path(value):
+        path = Path(value)
+        if path.parts and path.parts[0] == "datathon":
+            path = data_root.joinpath(*path.parts[1:])
+        elif not path.is_absolute():
+            path = data_root.parent / path
+        return str(path.resolve())
 
-FEATURE_NAME = 'des_product_class'
-CODE_SETS = 'cod_outfit'
-NAME_SET = 'outfit'
+    selected["des_filename"] = selected["des_filename"].map(image_path)
+    selected.to_csv(ensure_parent(data["valid_outfits_path"]), index=False)
+    return selected
 
-def build_valid_outfits_df():
-    config = load_config()
-    df_outfits = pd.read_csv(config['data']['outfits_path'])
-    df_products = pd.read_csv(config['data']['products_path'])
-
-    df_outfit_products = pd.merge(df_outfits, df_products, on='cod_modelo_color', how='outer')
-	
-    df_outfit_products['des_product_class'] = df_outfit_products.apply(get_des_product_class, axis=1)
-    
-    configurations_base = config['data']['configurations_base']
-    optional_products = config['data']['optional_products']
-
-    optional_configurations = create_combinations(optional_products, root=False)
-    all_configurations = create_configurations(configurations_base, optional_products)
-
-    selected_outfits_df, _ = select_valid_outfits(df_outfit_products, FEATURE_NAME, CODE_SETS, NAME_SET, all_configurations)
-    selected_outfits_df['des_filename'] = selected_outfits_df['des_filename'].str.replace('datathon', './data')
-
-    selected_outfits_df.to_csv(config['data']['valid_outfits_path'])
 
 if __name__ == "__main__":
     build_valid_outfits_df()
-

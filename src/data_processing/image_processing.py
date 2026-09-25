@@ -1,62 +1,40 @@
-# -*- coding: utf-8 -*-
+"""Float32 images in [0, 1] in memory; JPEG bytes in TFRecords."""
 
 import tensorflow as tf
 
+
 def load_and_preprocess_image(image_path, image_width, image_height):
-    """
-    Loads and preprocesses an image from the specified path.
-
-    Parameters:
-    - image_path (str): The file path of the image.
-    - image_width (int): Target width for resizing the image.
-    - image_height (int): Target height for resizing the image.
-
-    Returns:
-    - tf.Tensor: Preprocessed image as a TensorFlow tensor.
-
-    Example:
-    load_and_preprocess_image('path/to/image.jpg', 224, 224)
-    """
-    img = tf.io.read_file(image_path.iloc[0])
-    img = tf.image.decode_image(img, channels=3)  
-    img = tf.image.resize(img, [image_height, image_width])
-    img = img / 255.0
-    img = tf.expand_dims(img, 0)
-    return img
+    if hasattr(image_path, "iloc"):
+        image_path = image_path.iloc[0]
+    image = tf.io.read_file(str(image_path))
+    image = tf.image.decode_image(image, channels=3, expand_animations=False)
+    image = tf.image.convert_image_dtype(image, tf.float32)
+    image = tf.image.resize(image, [image_height, image_width])
+    return tf.expand_dims(image, 0)
 
 
 def create_white_image(width, height):
-    """
-    Creates a white image with the specified width and height.
+    return tf.ones([1, height, width, 3], dtype=tf.float32)
 
-    Parameters:
-    - width (int): Width of the white image.
-    - height (int): Height of the white image.
-
-    Returns:
-    - tf.Tensor: White image as a TensorFlow tensor.
-
-    Example:
-    create_white_image(224, 224)
-    """
-    white_tensor = tf.ones([height, width, 3], dtype=tf.float32)
-    white_image = white_tensor
-    white_image = tf.expand_dims(white_image, 0)
-    return white_image
 
 def _bytes_feature(value):
-    # Ensure that the image data is of type uint8
-    value = tf.image.convert_image_dtype(value, dtype=tf.uint8)
+    """Encode normalized floats (or uint8 pixels) without a second division."""
+    value = tf.convert_to_tensor(value)
+    value = tf.image.convert_image_dtype(value, tf.uint8, saturate=True)
+    if value.shape.rank == 4:
+        value = tf.squeeze(value, axis=0)
+    return tf.train.Feature(
+        bytes_list=tf.train.BytesList(value=[tf.io.encode_jpeg(value).numpy()])
+    )
 
-    # Remove the singleton batch dimension if it exists
-    value = tf.squeeze(value, axis=0) if len(value.shape) == 4 else value
 
-    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[tf.io.encode_jpeg(value).numpy()]))
+def serialize_image(image):
+    features = tf.train.Features(feature={"image": _bytes_feature(image)})
+    return tf.train.Example(features=features).SerializeToString()
 
 
 def parse_tfrecord_fn(example_proto):
-    feature_description = {'image': tf.io.FixedLenFeature([], tf.string)}
-    example = tf.io.parse_single_example(example_proto, feature_description)
-    img = tf.io.decode_jpeg(example['image'], channels=3)
-    return img
-
+    description = {"image": tf.io.FixedLenFeature([], tf.string)}
+    example = tf.io.parse_single_example(example_proto, description)
+    image = tf.io.decode_jpeg(example["image"], channels=3)
+    return tf.image.convert_image_dtype(image, tf.float32)

@@ -5,3 +5,13 @@ data/
 vaes/
 
 reports/epoch_images_256/
+
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+.pytest_cache/
+.ruff_cache/
+/models/
+/figures/
+reports/logs/
