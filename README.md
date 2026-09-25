@@ -2,7 +2,7 @@
 
 A research prototype following the [UPC Datathon project](https://github.com/Francesco7D2/datathon-2023-fashion-compatibility). It learns to reconstruct complete outfits from a compressed representation of product images.
 
-**Current scope:** preprocessing, outfit-image TFRecords, a convolutional stochastic autoencoder, embedding export, frequency-weighted candidate generation, exact nearest-neighbor scoring, and product-conditioned top-k recommendations. The missing stage was recovered from [the second repository's prediction notebook](https://github.com/Francesco7D2/MANGO-fashion-compatibility/blob/c61f8692ca31203ab067fde33949f38abd60661a/notebooks/outfit_predictions.ipynb).
+This version of the code is being refactored with assistance from OpenAI Codex, using GPT-5.6 Sol with medium reasoning effort.
 
 ## Setup
 
@@ -34,7 +34,7 @@ python -m scripts.run_pipeline --from-stage train --to-stage index --device gpu
 
 `training.device` in `config.yml` accepts `auto`, `cpu`, or `gpu`. `auto` selects the first TensorFlow GPU and otherwise uses the CPU. Training and index building print the selected device before doing expensive work.
 
-Training displays overall batch progress, speed, estimated completion time, current epoch, and the latest epoch loss. Set `training.progress_bar: false` in `config.yml` or pass `--no-progress` to `python -m scripts.training.train_vae` to disable it.
+Training displays the batch progress, speed, and estimated completion time for each epoch. The first batch compiles TensorFlow's training graph, so its initial estimate is not representative; use the completed epoch time for CPU/GPU comparisons. Checkpoint embedding export has its own progress display. Set `training.progress_bar: false` in `config.yml` or pass `--no-progress` to `python -m scripts.training.train_vae` to disable the displays.
 
 On Apple silicon, `requirements.txt` installs Apple's `tensorflow-metal` plugin. On Linux with an NVIDIA GPU—or Windows using WSL2 with NVIDIA support—install the CUDA extras instead:
 

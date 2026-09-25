@@ -32,10 +32,13 @@ def train_outfit_embeddings(config_path=None, device=None, show_progress=None):
     device_report = configure_tensorflow(device or training.get("device", "auto"))
     print(f"TensorFlow device: {json.dumps(device_report)}", flush=True)
     tf.keras.utils.set_random_seed(training.get("seed", 42))
-    dataset = tf.data.TFRecordDataset(training["train_dataset_path"]).map(
-        parse_tfrecord_fn
+    dataset = tf.data.TFRecordDataset(
+        training["train_dataset_path"], num_parallel_reads=tf.data.AUTOTUNE
+    ).map(parse_tfrecord_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    dataset = dataset.map(
+        lambda image: tf.ensure_shape(image, (128, 960, 3)),
+        num_parallel_calls=tf.data.AUTOTUNE,
     )
-    dataset = dataset.map(lambda image: tf.ensure_shape(image, (128, 960, 3)))
     dataset = dataset.batch(training["batch_size"]).prefetch(tf.data.AUTOTUNE)
     outfit_count = len(pd.read_csv(data["outfits_w_products_path"], usecols=[0]))
     batches_per_epoch = math.ceil(outfit_count / training["batch_size"])
@@ -50,80 +53,102 @@ def train_outfit_embeddings(config_path=None, device=None, show_progress=None):
     optimizer = tf.keras.optimizers.Adam(training.get("learning_rate", 1e-4))
     history = []
     epoch_seconds = []
-    with tqdm(
-        total=training["epochs"] * batches_per_epoch,
-        desc="Training",
-        unit="batch",
-        dynamic_ncols=True,
-        disable=not show_progress,
-    ) as progress:
-        for epoch in range(1, training["epochs"] + 1):
-            progress.set_description(f"Epoch {epoch}/{training['epochs']}")
+    print(
+        f"Training {outfit_count} outfits in {batches_per_epoch} batches per epoch "
+        f"for {training['epochs']} epochs.",
+        flush=True,
+    )
+    if show_progress:
+        print(
+            "The first batch compiles the TensorFlow graph; wait for several batches "
+            "before trusting its ETA.",
+            flush=True,
+        )
+    for epoch in range(1, training["epochs"] + 1):
+        with tqdm(
+            dataset,
+            total=batches_per_epoch,
+            desc=f"Epoch {epoch}/{training['epochs']}",
+            unit="batch",
+            dynamic_ncols=True,
+            leave=False,
+            disable=not show_progress,
+        ) as progress:
             start = time.monotonic()
             metric = tf.keras.metrics.Mean()
-            for batch in dataset:
+            for batch in progress:
                 metric.update_state(
                     train_step(model, batch, optimizer),
                     sample_weight=tf.cast(tf.shape(batch)[0], tf.float32),
                 )
-                progress.update()
-            if not int(metric.count.numpy()):
-                raise ValueError("Training dataset is empty")
-            history.append(float(metric.result().numpy()))
-            epoch_seconds.append(time.monotonic() - start)
-            progress.set_postfix(loss=f"{history[-1]:.6f}")
-            message = (
-                f"Epoch {epoch}: reconstruction_loss={history[-1]:.6f}; "
-                f"seconds={epoch_seconds[-1]:.1f}"
+        if not int(metric.count.numpy()):
+            raise ValueError("Training dataset is empty")
+        history.append(float(metric.result().numpy()))
+        epoch_seconds.append(time.monotonic() - start)
+        print(
+            f"Epoch {epoch}: reconstruction_loss={history[-1]:.6f}; "
+            f"seconds={epoch_seconds[-1]:.1f}",
+            flush=True,
+        )
+        if (
+            epoch % training.get("checkpoint_every", 20) == 0
+            or epoch == training["epochs"]
+        ):
+            model.save_weights(ensure_parent(training["model_weights_path"]))
+            encoding_batches = tqdm(
+                dataset,
+                total=batches_per_epoch,
+                desc=f"Checkpoint {epoch}: encoding",
+                unit="batch",
+                dynamic_ncols=True,
+                leave=False,
+                disable=not show_progress,
             )
-            progress.write(message) if show_progress else print(message)
-            if (
-                epoch % training.get("checkpoint_every", 20) == 0
-                or epoch == training["epochs"]
-            ):
-                model.save_weights(ensure_parent(training["model_weights_path"]))
+            try:
                 embeddings = tf.concat(
-                    [model.encode(batch)[0] for batch in dataset], axis=0
+                    [model.encode(batch)[0] for batch in encoding_batches], axis=0
                 ).numpy()
-                with open(ensure_parent(training["model_data_path"]), "wb") as stream:
-                    pickle.dump(
-                        {
-                            "latent_space": embeddings,
-                            "reconstruction_loss": history,
-                            "epoch_seconds": epoch_seconds,
-                            "embedding_type": "posterior_mean",
-                        },
-                        stream,
-                    )
-                pd.DataFrame(
+            finally:
+                encoding_batches.close()
+            with open(ensure_parent(training["model_data_path"]), "wb") as stream:
+                pickle.dump(
                     {
-                        "epoch": range(1, len(history) + 1),
+                        "latent_space": embeddings,
                         "reconstruction_loss": history,
                         "epoch_seconds": epoch_seconds,
-                    }
-                ).to_csv(ensure_parent(training["metrics_path"]), index=False)
-                manifest = {
-                    "objective": "mean_pixel_binary_cross_entropy_without_kl",
-                    "embedding_type": "posterior_mean",
-                    "epoch": epoch,
-                    "sha256": {
-                        key: file_digest(path)
-                        for key, path in {
-                            "weights": training["model_weights_path"],
-                            "training_records": training["train_dataset_path"],
-                            "training_outfits": data["outfits_w_products_path"],
-                        }.items()
+                        "embedding_type": "posterior_mean",
                     },
-                }
-                manifest_path = training.get(
-                    "model_manifest_path", training["model_weights_path"] + ".json"
+                    stream,
                 )
-                with open(ensure_parent(manifest_path), "w") as stream:
-                    json.dump(manifest, stream, indent=2)
-                if samples is not None:
-                    generate_and_save_images(
-                        model, epoch, samples, training["epoch_images_path"]
-                    )
+            pd.DataFrame(
+                {
+                    "epoch": range(1, len(history) + 1),
+                    "reconstruction_loss": history,
+                    "epoch_seconds": epoch_seconds,
+                }
+            ).to_csv(ensure_parent(training["metrics_path"]), index=False)
+            manifest = {
+                "objective": "mean_pixel_binary_cross_entropy_without_kl",
+                "embedding_type": "posterior_mean",
+                "epoch": epoch,
+                "sha256": {
+                    key: file_digest(path)
+                    for key, path in {
+                        "weights": training["model_weights_path"],
+                        "training_records": training["train_dataset_path"],
+                        "training_outfits": data["outfits_w_products_path"],
+                    }.items()
+                },
+            }
+            manifest_path = training.get(
+                "model_manifest_path", training["model_weights_path"] + ".json"
+            )
+            with open(ensure_parent(manifest_path), "w") as stream:
+                json.dump(manifest, stream, indent=2)
+            if samples is not None:
+                generate_and_save_images(
+                    model, epoch, samples, training["epoch_images_path"]
+                )
     return model, history
 
 
