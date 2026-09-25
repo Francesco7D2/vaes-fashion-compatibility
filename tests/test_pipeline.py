@@ -9,6 +9,7 @@ import yaml
 from scripts.data_processing.build_image_arrays import build_image_arrays
 from scripts.data_processing.build_outfit_w_products_df import build_outfit_w_products
 from scripts.data_processing.build_valid_outfits_df import build_valid_outfits_df
+from scripts.run_pipeline import run_pipeline
 from scripts.training.train_vae import train_outfit_embeddings
 from src.data_processing.group_manipulation import (
     create_combinations,
@@ -17,6 +18,7 @@ from src.data_processing.group_manipulation import (
 )
 from src.data_processing.image_processing import parse_tfrecord_fn, serialize_image
 from src.data_processing.schema import PRODUCT_CLASSES
+from src.utils.pipeline_validation import validation_frame
 from src.utils.setup_utilities import load_config
 from src.utils.train_utilities import compute_loss, train_step
 
@@ -126,6 +128,8 @@ def test_csv_to_records_pipeline(tmp_path):
     model, history = train_outfit_embeddings(config_path)
     assert len(history) == 1 and np.isfinite(history[0])
     assert Path(paths["model_weights_path"]).is_file()
+    assert Path(paths["metrics_path"]).is_file()
+    assert Path(paths["model_manifest_path"]).is_file()
     assert (Path(paths["epoch_images_path"]) / "image_at_epoch_0001.png").is_file()
     import pickle
 
@@ -154,6 +158,17 @@ def test_csv_to_records_pipeline(tmp_path):
     with np.load(rec["embeddings_path"], allow_pickle=False) as arrays:
         assert arrays["candidate_ids"].tolist() == candidates.candidate_id.tolist()
         assert arrays["reference_ids"].tolist() == ["1"]
+    report = validation_frame(config_path)
+    assert report.status.eq("PASS").all(), report[report.status != "PASS"]
+    dry_run = run_pipeline(
+        config_path, from_stage="images", to_stage="candidates", dry_run=True
+    )
+    assert dry_run["status"] == "DRY_RUN"
+    assert [stage["name"] for stage in dry_run["stages"]] == [
+        "images",
+        "train",
+        "candidates",
+    ]
     # Checkpoint provenance is checked before attempting to load model weights.
     weights_path = Path(paths["model_weights_path"])
     with weights_path.open("ab") as stream:

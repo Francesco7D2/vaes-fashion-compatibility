@@ -1,5 +1,9 @@
 """Build full and preview TFRecords in one pass."""
 
+import argparse
+import os
+from pathlib import Path
+
 import pandas as pd
 import tensorflow as tf
 from tqdm import tqdm
@@ -32,26 +36,40 @@ def build_image_arrays(compact=False, config_path=None):
     samples = set(training["train_sample_indices"])
     if any(index < 0 or index >= len(outfits) for index in samples):
         raise ValueError("train_sample_indices must refer to existing outfit rows")
-    with (
-        tf.io.TFRecordWriter(ensure_parent(training["train_dataset_path"])) as writer,
-        tf.io.TFRecordWriter(
-            ensure_parent(training["train_sample_path"])
-        ) as sample_writer,
-    ):
-        for index, (_, row) in enumerate(tqdm(outfits.iterrows(), total=len(outfits))):
-            images = []
-            for slot in PRODUCT_CLASSES:
-                product = row[slot]
-                images.append(
-                    white
-                    if pd.isna(product)
-                    else load_and_preprocess_image(paths.loc[product], width, height)
-                )
-            record = serialize_image(tf.concat(images, axis=2))
-            writer.write(record)
-            if index in samples:
-                sample_writer.write(record)
+    dataset_path = Path(ensure_parent(training["train_dataset_path"]))
+    sample_path = Path(ensure_parent(training["train_sample_path"]))
+    temporary_dataset = dataset_path.with_suffix(dataset_path.suffix + ".tmp")
+    temporary_sample = sample_path.with_suffix(sample_path.suffix + ".tmp")
+    try:
+        with (
+            tf.io.TFRecordWriter(str(temporary_dataset)) as writer,
+            tf.io.TFRecordWriter(str(temporary_sample)) as sample_writer,
+        ):
+            for index, (_, row) in enumerate(
+                tqdm(outfits.iterrows(), total=len(outfits))
+            ):
+                images = []
+                for slot in PRODUCT_CLASSES:
+                    product = row[slot]
+                    images.append(
+                        white
+                        if pd.isna(product)
+                        else load_and_preprocess_image(
+                            paths.loc[product], width, height
+                        )
+                    )
+                record = serialize_image(tf.concat(images, axis=2))
+                writer.write(record)
+                if index in samples:
+                    sample_writer.write(record)
+        os.replace(temporary_dataset, dataset_path)
+        os.replace(temporary_sample, sample_path)
+    finally:
+        temporary_dataset.unlink(missing_ok=True)
+        temporary_sample.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
-    build_image_arrays()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config")
+    build_image_arrays(config_path=parser.parse_args().config)

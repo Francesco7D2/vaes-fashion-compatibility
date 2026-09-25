@@ -56,8 +56,8 @@ Identical candidate draws are retained in the generation table to preserve sampl
 
 Image memory is bounded by the encoding batch and LRU product-image cache. Distance scratch memory is bounded by both distance block settings. Embeddings and candidate tables remain in memory (roughly 100 MB for 100,000 float32 vectors of length 256, plus tables and model); this is not a disk-streaming billion-item index. Keep the serving SQLite file; serving does not require the NPZ, training model, or images. The saved index remains an intentional snapshot until rebuilt.
 
-## Data recovered in this session
+## Local data status
 
-The additional repository contains both original CSVs and only 13 of 9,222 referenced product images. The remaining JPGs and trained weights were not found there. The local ignored `data/` folder includes the recovered CSVs and available sample images. The candidate CSV and frequencies have been generated from the recovered real catalog. Complete image encoding and real-data ranking still require the missing images and a new checkpoint.
+The local ignored `data/` folder now contains both original CSVs and all 9,222 referenced product images. Image coverage, corrected preprocessing, 3,164 training records, four preview records, the 100,000-candidate CSV, and configuration frequencies have been validated. Complete candidate encoding and real-data ranking still require the 400-epoch training stage (or a deliberately shortened experiment) to produce a new checkpoint.
 
 The automated tests cover frequency sampling, unseen-product exclusion, reproducibility, empty pools, brute-force distance equivalence and ties, duplicate suppression, product lookup, leading-zero IDs, stale-file rejection, missing images, and a synthetic CSV → training → saved checkpoint → candidate encoding → nearest-neighbor → recommendation run.

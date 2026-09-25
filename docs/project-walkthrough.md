@@ -59,7 +59,7 @@ The loss rewards pixel reconstruction, not human judgments of compatibility. Whi
 | Maximizing ELBO | Reconstruction cross entropy; no KL/prior regularization |
 | 42 configurations, 2,303 selected outfits | Recomputed: 64 allowed configurations, 45 observed, 3,164 selected outfits |
 | 100,000 generated candidates | Restored from the second repository; real metadata generation validated |
-| Ranking by nearest training embedding | Restored; synthetic end-to-end test passes, full images/checkpoint still needed |
+| Ranking by nearest training embedding | Restored; synthetic end-to-end test passes, full checkpoint still needed |
 | Qualitative recommendations | Report figures, without executable evaluation |
 
 Your proposed retrieval method moves expensive work offline: generate candidates, encode them, find their distances to training embeddings, then serve highly ranked candidates containing the requested product. This is an experiment worth testing, but distance to a known outfit is a hypothesis for compatibility, not a validated score. The restored pipeline implements this process, but the original figures have not been reproduced with complete images and weights.
@@ -74,7 +74,7 @@ Image scaling, subset generation, NaN handling, and batching fixes intentionally
 
 ## Next research steps
 
-1. Restore the missing product images. The original CSVs and retrieval notebook have now been recovered. Rebuild records, inspect strips, and run the corrected baseline.
+1. Run the corrected training baseline with the now-complete local image collection, then inspect its loss curve and reconstruction previews.
 2. Define evaluation for new combinations of known products versus entirely unseen products. Compare simple category/color or feature-neighbor baselines, controlling for outfit size and empty slots.
 3. Run a separate VAE experiment with a linear mean/log-variance head and explicitly scaled KL loss. Track reconstruction and KL independently.
 4. Run the restored candidate generation and retrieval stages with real images and a new checkpoint. Measure ranking quality and serving latency.
@@ -83,4 +83,4 @@ Refactor base: commit `e598727`, dated 2024-03-09. Full-data training and report
 
 ## Additional source recovered
 
-The MANGO-fashion-compatibility repository contains the original prediction workflow and genuine ELBO loss definitions in notebook variants. The no-KL finding above applies to this repository's executable baseline, not every historical experiment. See [the detailed report corrections](report-update.md) for measured dataset changes and [the recommendation guide](recommendation.md) for commands. The corrected metadata pipeline selects 3,164 outfits; the old rules reproduce 2,303. A seed-42 run generated 100,000 distinct candidates covering 3,378 unseen products. Full-image model results remain unverified.
+The MANGO-fashion-compatibility repository contains the original prediction workflow and genuine ELBO loss definitions in notebook variants. The no-KL finding above applies to this repository's executable baseline, not every historical experiment. See [the detailed report corrections](report-update.md) for measured dataset changes and [the recommendation guide](recommendation.md) for commands. The corrected metadata pipeline selects 3,164 outfits; the old rules reproduce 2,303. A seed-42 run generated 100,000 distinct candidates covering 3,378 unseen products. All referenced images are now available locally, but new full-data model and recommendation results remain unverified until training and indexing finish.

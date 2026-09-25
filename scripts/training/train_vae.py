@@ -1,9 +1,11 @@
 """Train the original reconstruction objective using the shared model."""
 
+import argparse
 import json
 import pickle
 import time
 
+import pandas as pd
 import tensorflow as tf
 
 from src.data_processing.image_processing import parse_tfrecord_fn
@@ -35,6 +37,7 @@ def train_outfit_embeddings(config_path=None):
     model(tf.zeros((1, 128, 960, 3)))
     optimizer = tf.keras.optimizers.Adam(training.get("learning_rate", 1e-4))
     history = []
+    epoch_seconds = []
     for epoch in range(1, training["epochs"] + 1):
         start = time.monotonic()
         metric = tf.keras.metrics.Mean()
@@ -46,9 +49,10 @@ def train_outfit_embeddings(config_path=None):
         if not int(metric.count.numpy()):
             raise ValueError("Training dataset is empty")
         history.append(float(metric.result().numpy()))
+        epoch_seconds.append(time.monotonic() - start)
         print(
             f"Epoch {epoch}: reconstruction_loss={history[-1]:.6f}; "
-            f"seconds={time.monotonic() - start:.1f}"
+            f"seconds={epoch_seconds[-1]:.1f}"
         )
         if (
             epoch % training.get("checkpoint_every", 20) == 0
@@ -63,10 +67,18 @@ def train_outfit_embeddings(config_path=None):
                     {
                         "latent_space": embeddings,
                         "reconstruction_loss": history,
+                        "epoch_seconds": epoch_seconds,
                         "embedding_type": "posterior_mean",
                     },
                     stream,
                 )
+            pd.DataFrame(
+                {
+                    "epoch": range(1, len(history) + 1),
+                    "reconstruction_loss": history,
+                    "epoch_seconds": epoch_seconds,
+                }
+            ).to_csv(ensure_parent(training["metrics_path"]), index=False)
             manifest = {
                 "objective": "mean_pixel_binary_cross_entropy_without_kl",
                 "embedding_type": "posterior_mean",
@@ -93,4 +105,6 @@ def train_outfit_embeddings(config_path=None):
 
 
 if __name__ == "__main__":
-    train_outfit_embeddings()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config")
+    train_outfit_embeddings(parser.parse_args().config)

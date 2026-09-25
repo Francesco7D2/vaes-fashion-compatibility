@@ -30,6 +30,8 @@ training:
   epoch_images_path: './figures/epoch_images_256'
   model_weights_path: './models/vae_256.weights.h5'
   model_data_path: './models/vae_data_256.pkl'
+  metrics_path: './models/training_metrics.csv'
+  model_manifest_path: './models/vae_256.weights.h5.json'
   train_sample_indices:
     - 45
     - 28
@@ -54,3 +56,6 @@ recommendation:
   embeddings_path: './data/processed/recommendation_embeddings.npz'
   index_path: './data/processed/recommendations.sqlite'
   index_manifest_path: './data/processed/recommendation_index.json'
+
+pipeline:
+  run_manifest_path: './reports/pipeline_run.json'

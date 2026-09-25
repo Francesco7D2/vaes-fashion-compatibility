@@ -74,6 +74,6 @@ For the implemented ranking procedure, describe it without claiming a full-data 
 
 ## Results that still need rerunning
 
-Only 13 referenced product images are available in the recovered repository. The 100,000 real candidate outfits have been generated from metadata, but they have **not** been encoded or ranked with a newly trained full-data model. End-to-end encoding and retrieval were tested with synthetic images and the actual model architecture/checkpoint path.
+All 9,222 referenced product images are now available in the local ignored data directory, and the 3,164 training TFRecords have been built. The 100,000 real candidate outfits have been generated from metadata, but they have **not** yet been encoded or ranked with a newly trained full-data model. End-to-end encoding and retrieval were tested with synthetic images and the actual model architecture/checkpoint path.
 
 Do not reuse the old reconstruction curves, distance distribution, qualitative examples, 30-minute/2-hour encoding times, or serving latency as measured results of this changed pipeline. Rebuild TFRecords, retrain, rebuild the index, then replace the figures and timings. Training previews are not held-out tests; reconstruction and nearest-neighbor proximity do not by themselves establish fashion compatibility or unseen-product generalization.

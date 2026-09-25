@@ -1,5 +1,7 @@
 """Create one row per outfit with one product ID per fixed image slot."""
 
+import argparse
+
 import pandas as pd
 
 from src.data_processing.schema import PRODUCT_CLASSES
@@ -19,4 +21,6 @@ def build_outfit_w_products(config_path=None):
 
 
 if __name__ == "__main__":
-    build_outfit_w_products()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config")
+    build_outfit_w_products(parser.parse_args().config)

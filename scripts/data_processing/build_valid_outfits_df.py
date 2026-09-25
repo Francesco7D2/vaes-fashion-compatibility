@@ -1,5 +1,6 @@
 """Join product metadata and retain outfits matching the configured rules."""
 
+import argparse
 from pathlib import Path
 
 import pandas as pd
@@ -48,4 +49,6 @@ def build_valid_outfits_df(config_path=None):
 
 
 if __name__ == "__main__":
-    build_valid_outfits_df()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config")
+    build_valid_outfits_df(parser.parse_args().config)

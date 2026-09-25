@@ -17,11 +17,18 @@ python -m pip install -r requirements.txt
 python -m pytest -q
 ```
 
+To open the inspection notebooks locally, install Jupyter once and start it:
+
+```bash
+python -m pip install -r requirements-notebooks.txt
+python -m jupyter lab
+```
+
 Tests generate a tiny synthetic dataset and perform one training update using the actual model. No MANGO data or GPU is required. Large dense layers mean even this smoke test needs substantial memory.
 
 ## Required data
 
-The full data/images and trained weights are not committed in this repository. The additional repository supplies the CSVs but only 13 referenced images; recovered files are in the local ignored data folder. For a complete run, supply:
+The local ignored `data/` directory now contains the source CSVs and all 9,222 referenced product images. They are intentionally excluded from Git because of their size. A fresh clone still needs:
 
 - `data/tabular/outfit_data.csv`: `cod_outfit`, `cod_modelo_color`.
 - `data/tabular/product_data.csv`: `cod_modelo_color`, `des_product_category`, `des_product_family`, `des_product_type`, `des_filename`.
@@ -31,7 +38,29 @@ Product metadata must contain one row per product ID. IDs are strings to retain 
 
 ## Run
 
-Edit `config.yml`, then run from the repository root:
+Edit `config.yml`, then run the complete pipeline from the repository root:
+
+```bash
+python -m scripts.run_pipeline
+python -m scripts.validate_pipeline
+```
+
+The full command includes 400 training epochs and recommendation indexing, so it can take hours. To rebuild only the image preprocessing artifacts:
+
+```bash
+python -m scripts.run_pipeline --from-stage select --to-stage images
+python -m scripts.validate_pipeline --allow-incomplete
+```
+
+Resume from a later stage without rerunning earlier work:
+
+```bash
+python -m scripts.run_pipeline --from-stage train --to-stage index
+```
+
+Use `--dry-run` to print commands without executing them. Every heavy stage runs in a fresh Python process so TensorFlow and image memory are released between stages. Stage status and duration are saved in `reports/pipeline_run.json`.
+
+The equivalent individual commands are:
 
 ```bash
 python -m scripts.data_processing.build_valid_outfits_df
@@ -79,3 +108,13 @@ The historical `ELBO_list` is replaced by accurately named positive reconstructi
 **Rebuild both TFRecords and retrain.** Old records may have lost information through quantization; normalizing them at read time cannot repair it. Report figures and notebook outputs are historical, not validated results of this refactor. The recovered CSVs confirm 3,164 corrected selected outfits versus 2,303 under the old rules. No full-data accuracy or compatibility improvement is claimed.
 
 The second repository includes ELBO-based notebook variants. The absence of KL described above applies to this executable baseline; it does not establish that your historical report used the same loss. See the report-update document before changing historical claims.
+
+## Inspection notebooks
+
+Open these notebooks after activating the project environment:
+
+- `notebooks/01_pipeline_file_check.ipynb`: validate inputs and every expected artifact, then inspect a training image strip.
+- `notebooks/02_training_metrics.ipynb`: plot reconstruction loss, epoch duration, embedding diagnostics, and the latest reconstruction preview.
+- `notebooks/03_outfit_generation_check.ipynb`: compare configuration frequencies, inspect generated outfits, and view top recommendations for one product.
+
+The metrics notebook intentionally labels the executable baseline's value as training reconstruction loss. It is not a held-out accuracy metric or ELBO.

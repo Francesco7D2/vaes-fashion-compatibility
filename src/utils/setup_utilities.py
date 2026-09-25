@@ -14,7 +14,7 @@ def load_config(config_path=None):
     path = (Path(config_path) if config_path else PROJECT_ROOT / "config.yml").resolve()
     with path.open() as stream:
         config = yaml.safe_load(stream)
-    for section in ("data", "training", "recommendation"):
+    for section in ("data", "training", "recommendation", "pipeline"):
         for key, value in config.get(section, {}).items():
             if key.endswith("_path"):
                 config[section][key] = str((path.parent / value).resolve())
