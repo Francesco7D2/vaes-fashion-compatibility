@@ -1,9 +1,5 @@
-# -*- coding: utf-8 -*-
-
-
-
-
 import pandas as pd
+
 
 def get_des_product_class(row: pd.Series) -> pd.Series:
     """
@@ -24,11 +20,12 @@ def get_des_product_class(row: pd.Series) -> pd.Series:
       'des_product_type'.
     - Otherwise, the function returns 'des_product_category'.
     """
-    if row['des_product_category'] == 'Accesories, Swim and Intimate' and row['des_product_family'] != 'Jewellery':
-        return row['des_product_family']
-    elif row['des_product_family'] == 'Jewellery':
-        return row['des_product_type']
+    if (
+        row["des_product_category"] == "Accesories, Swim and Intimate"
+        and row["des_product_family"] != "Jewellery"
+    ):
+        return row["des_product_family"]
+    elif row["des_product_family"] == "Jewellery":
+        return row["des_product_type"]
     else:
-        return row['des_product_category']
-        
-        
+        return row["des_product_category"]

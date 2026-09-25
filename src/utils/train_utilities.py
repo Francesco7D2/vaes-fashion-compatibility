@@ -1,50 +1,53 @@
-# -*- coding: utf-8 -*-
+"""Reconstruction-only training; the original experiment has no KL term."""
 
-import tensorflow as tf
+from pathlib import Path
+
 import matplotlib.pyplot as plt
+import tensorflow as tf
+
 
 @tf.function
-def log_normal_pdf(sample, mean, logvar, raxis=1):
-  log2pi = tf.math.log(2. * np.pi)
-  return tf.reduce_sum(
-      -.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi),
-      axis=raxis)
+def compute_loss(model, x):
+    """Mean pixel binary cross entropy (not a negative ELBO)."""
+    x = tf.cast(x, tf.float32)
+    return tf.reduce_mean(
+        tf.nn.sigmoid_cross_entropy_with_logits(logits=model(x), labels=x)
+    )
 
-@tf.function
+
 def train_step(model, x, optimizer):
-    """Executes one training step and returns the loss.
+    """Create optimizer state outside the graph, including for repeated runs."""
+    if not model.built:
+        model(x)
+    if not optimizer.built:
+        optimizer.build(model.trainable_variables)
+    return _train_step(model, x, optimizer)
 
-    This function computes the loss and gradients, and uses the latter to
-    update the model's parameters.
-    """
+
+@tf.function
+def _train_step(model, x, optimizer):
     with tf.GradientTape() as tape:
         loss = compute_loss(model, x)
     gradients = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-
-@tf.function
-def compute_loss(model, x):
-    """Computes the loss for a given input batch."""
-    x_logit = model(x)
-    # Cast the labels to float32 to match the type of logits
-    x = tf.cast(x, dtype=tf.float32)
-    cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
-    return tf.reduce_mean(cross_ent)
+    return loss
 
 
 def generate_and_save_images(model, epoch, test_sample, path):
-    mean, logvar = model.encode(test_sample)
-    z = model.reparameterize(mean, logvar)
-    predictions = model.sample(z)
-    fig = plt.figure(figsize=(10, 10))
-    for i, (img_pred, img_real) in enumerate(zip(predictions, test_sample)):
-        plt.subplot(8, 1, 2*i + 1)
-        plt.imshow(img_real)
-        plt.tick_params(axis='both', which='both', bottom=False, top=False, left=False, right=False, labelbottom=False, labelleft=False)
-        plt.subplot(8, 1, 2*i + 2)
-        plt.imshow(img_pred)
-        plt.tick_params(axis='both', which='both', bottom=False, top=False, left=False, right=False, labelbottom=False, labelleft=False)
-    plt.subplots_adjust(left=0.02, right=0.99, top=0.99, bottom=0.01, wspace=0.1, hspace=0.1)
-    plt.savefig(os.path.join(path, 'image_at_epoch_{:04d}.png'.format(epoch)))
-    
-     
+    """Save deterministic reconstructions of any nonempty sample batch."""
+    mean, _ = model.encode(test_sample)
+    predictions = model.decode(mean, apply_sigmoid=True)
+    count = len(test_sample)
+    if not count:
+        return
+    Path(path).mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(count * 2, 1, figsize=(10, count * 2), squeeze=False)
+    for index, (original, reconstructed) in enumerate(zip(test_sample, predictions)):
+        for axis, image in zip(
+            axes[2 * index : 2 * index + 2, 0], (original, reconstructed)
+        ):
+            axis.imshow(image)
+            axis.axis("off")
+    fig.tight_layout()
+    fig.savefig(Path(path) / f"image_at_epoch_{epoch:04d}.png")
+    plt.close(fig)

@@ -1,18 +1,33 @@
-# -*- coding: utf-8 -*-
+"""Configuration and output-directory helpers."""
 
+import logging
+from pathlib import Path
 
 import yaml
-import logging
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-
-def load_config(config_path='config.yml'):
-    with open(config_path, 'r') as config_file:
-        config = yaml.safe_load(config_file)
+def load_config(config_path=None):
+    """Resolve paths relative to the YAML file, not the shell cwd."""
+    path = (Path(config_path) if config_path else PROJECT_ROOT / "config.yml").resolve()
+    with path.open() as stream:
+        config = yaml.safe_load(stream)
+    for section in ("data", "training"):
+        for key, value in config[section].items():
+            if key.endswith("_path"):
+                config[section][key] = str((path.parent / value).resolve())
     return config
 
 
-def setup_logging(log_file='reports/logs/main.log', log_level=logging.INFO):
-    logging.basicConfig(filename=log_file, level=log_level,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
-                        
+def ensure_parent(path):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def setup_logging(log_file="reports/logs/main.log", log_level=logging.INFO):
+    logging.basicConfig(
+        filename=ensure_parent(log_file),
+        level=log_level,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
