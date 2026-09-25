@@ -34,6 +34,8 @@ python -m scripts.run_pipeline --from-stage train --to-stage index --device gpu
 
 `training.device` in `config.yml` accepts `auto`, `cpu`, or `gpu`. `auto` selects the first TensorFlow GPU and otherwise uses the CPU. Training and index building print the selected device before doing expensive work.
 
+Training displays overall batch progress, speed, estimated completion time, current epoch, and the latest epoch loss. Set `training.progress_bar: false` in `config.yml` or pass `--no-progress` to `python -m scripts.training.train_vae` to disable it.
+
 On Apple silicon, `requirements.txt` installs Apple's `tensorflow-metal` plugin. On Linux with an NVIDIA GPU—or Windows using WSL2 with NVIDIA support—install the CUDA extras instead:
 
 ```bash

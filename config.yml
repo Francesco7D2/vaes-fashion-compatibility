@@ -43,6 +43,7 @@ training:
   learning_rate: 0.0001
   seed: 42
   checkpoint_every: 20
+  progress_bar: true
 
 recommendation:
   num_candidates: 100000

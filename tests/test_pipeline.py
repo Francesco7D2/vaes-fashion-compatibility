@@ -123,7 +123,7 @@ def test_csv_to_records_pipeline(tmp_path):
     with pytest.raises(ValueError, match="Channel-stacked"):
         build_image_arrays(compact=True, config_path=config_path)
 
-    config["training"].update(epochs=1, batch_size=2)
+    config["training"].update(epochs=1, batch_size=2, progress_bar=False)
     config_path.write_text(yaml.safe_dump(config))
     model, history = train_outfit_embeddings(config_path)
     assert len(history) == 1 and np.isfinite(history[0])
