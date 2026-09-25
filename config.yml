@@ -40,3 +40,17 @@ training:
   learning_rate: 0.0001
   seed: 42
   checkpoint_every: 20
+
+recommendation:
+  num_candidates: 100000
+  seed: 42
+  encoding_batch_size: 32
+  image_cache_size: 256
+  distance_candidate_block: 64
+  distance_reference_block: 256
+  candidates_path: './data/processed/candidates.csv'
+  configurations_path: './data/processed/configuration_frequencies.csv'
+  generation_manifest_path: './data/processed/candidate_generation.json'
+  embeddings_path: './data/processed/recommendation_embeddings.npz'
+  index_path: './data/processed/recommendations.sqlite'
+  index_manifest_path: './data/processed/recommendation_index.json'

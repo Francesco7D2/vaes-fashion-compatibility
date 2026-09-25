@@ -11,6 +11,8 @@ Outfit membership + product metadata + images
     -> concatenated 128 × 960 RGB image
     -> encoder -> 256-dimensional representation -> decoder
     -> reconstruction training and exported embeddings
+    -> frequency-weighted unseen-product candidates
+    -> exact nearest-training-embedding scores -> product lookup
 ```
 
 The rules are narrower than all possible fashion outfits. Footwear and earrings are mandatory; dresses and top/bottom outfits are alternatives. This reflects your original dataset analysis, not a general definition of compatibility.
@@ -31,7 +33,11 @@ There are ten available slots but at most nine occupied slots: the top/bottom ba
 | `src/models/vae256.py` | Encoder, sampling, decoder |
 | `src/utils/train_utilities.py` | Shared loss, gradient update, previews |
 | `scripts/training/train_vae.py` | Batching, epochs, checkpoints, embeddings |
-| `tests/test_pipeline.py` | Synthetic regressions and actual-model smoke test |
+| `src/recommendation/candidates.py` | Configuration frequencies and unseen-product sampling |
+| `src/recommendation/encoding.py` | Batched checkpoint encoding with an image cache |
+| `src/recommendation/ranking.py` | Exact distances and SQLite product lookup |
+| `scripts/recommendation/` | Candidate generation, index building, and top-k CLI commands |
+| `tests/test_pipeline.py`, `tests/test_recommendation.py` | Synthetic end-to-end test and sampling/retrieval regressions |
 
 The notebook and report remain historical artifacts; saved outputs have not been regenerated. The notebook assumes it starts inside the notebooks directory when changing its working directory.
 
@@ -51,12 +57,12 @@ The loss rewards pixel reconstruction, not human judgments of compatibility. Whi
 | --- | --- |
 | 128- versus 256-dimensional comparison | Only the 256-dimensional model |
 | Maximizing ELBO | Reconstruction cross entropy; no KL/prior regularization |
-| 42 configurations, 2,303 selected outfits | Historical counts; corrected rules allow 64 configurations and require rerunning |
-| 100,000 generated candidates | Candidate generation absent |
-| Ranking by nearest training embedding | Retrieval/ranking code absent |
+| 42 configurations, 2,303 selected outfits | Recomputed: 64 allowed configurations, 45 observed, 3,164 selected outfits |
+| 100,000 generated candidates | Restored from the second repository; real metadata generation validated |
+| Ranking by nearest training embedding | Restored; synthetic end-to-end test passes, full images/checkpoint still needed |
 | Qualitative recommendations | Report figures, without executable evaluation |
 
-Your proposed retrieval method moves expensive work offline: generate candidates, encode them, find their distances to training embeddings, then serve highly ranked candidates containing the requested product. This is an experiment worth testing, but distance to a known outfit is a hypothesis for compatibility, not a validated score. The checked-in code cannot reproduce these recommendation examples.
+Your proposed retrieval method moves expensive work offline: generate candidates, encode them, find their distances to training embeddings, then serve highly ranked candidates containing the requested product. This is an experiment worth testing, but distance to a known outfit is a hypothesis for compatibility, not a validated score. The restored pipeline implements this process, but the original figures have not been reproduced with complete images and weights.
 
 The report describes product overlap preventing a useful held-out split, then training on all selected outfits. Preview reconstruction therefore measures training examples. New-product generalization needs a separate evaluation design. A roughly bell-shaped distance histogram also does not establish the central limit theorem as its cause.
 
@@ -68,9 +74,13 @@ Image scaling, subset generation, NaN handling, and batching fixes intentionally
 
 ## Next research steps
 
-1. Recover the original data and missing Colab/retrieval scripts. Rebuild records, inspect strips, and run the corrected baseline.
+1. Restore the missing product images. The original CSVs and retrieval notebook have now been recovered. Rebuild records, inspect strips, and run the corrected baseline.
 2. Define evaluation for new combinations of known products versus entirely unseen products. Compare simple category/color or feature-neighbor baselines, controlling for outfit size and empty slots.
 3. Run a separate VAE experiment with a linear mean/log-variance head and explicitly scaled KL loss. Track reconstruction and KL independently.
-4. Restore candidate generation and retrieval, retaining product IDs alongside embeddings. Measure ranking quality and serving latency.
+4. Run the restored candidate generation and retrieval stages with real images and a new checkpoint. Measure ranking quality and serving latency.
 
 Refactor base: commit `e598727`, dated 2024-03-09. Full-data training and report reproduction require external data and were not performed.
+
+## Additional source recovered
+
+The MANGO-fashion-compatibility repository contains the original prediction workflow and genuine ELBO loss definitions in notebook variants. The no-KL finding above applies to this repository's executable baseline, not every historical experiment. See [the detailed report corrections](report-update.md) for measured dataset changes and [the recommendation guide](recommendation.md) for commands. The corrected metadata pipeline selects 3,164 outfits; the old rules reproduce 2,303. A seed-42 run generated 100,000 distinct candidates covering 3,378 unseen products. Full-image model results remain unverified.

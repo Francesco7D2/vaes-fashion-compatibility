@@ -89,6 +89,9 @@ def test_csv_to_records_pipeline(tmp_path):
             "des_product_type",
         ],
     )
+    unseen = products.copy()
+    unseen["cod_modelo_color"] = ["004", "005", "006"]
+    products = pd.concat([products, unseen], ignore_index=True)
     products["des_filename"] = "datathon/images/item.jpg"
     products.to_csv(data / "tabular" / "product_data.csv", index=False)
     pd.DataFrame(
@@ -131,6 +134,45 @@ def test_csv_to_records_pipeline(tmp_path):
     assert exported["latent_space"].shape == (1, 256)
     assert exported["embedding_type"] == "posterior_mean"
     assert model.decode(tf.zeros((1, model.latent_dim))).shape == (1, 128, 960, 3)
+
+    from scripts.recommendation.build_index import build_index
+    from scripts.recommendation.generate_candidates import generate_candidates
+    from src.recommendation.ranking import recommend
+
+    config["recommendation"].update(num_candidates=20, encoding_batch_size=3)
+    config_path.write_text(yaml.safe_dump(config))
+    candidates, _ = generate_candidates(config_path)
+    metadata = build_index(config_path)
+    rec = load_config(config_path)["recommendation"]
+    result = recommend(rec["index_path"], "004")
+    assert len(result) == 1  # Repeated random draws of the same outfit are collapsed.
+    assert set(result[0]["products"].values()) == {"004", "005", "006"}
+    assert result[0]["nearest_training_outfit"] == "1"
+    assert result[0]["distance"] < 1e-3
+    assert metadata["embedding_type"] == "posterior_mean"
+    assert metadata["distinct_outfits"] == 1
+    with np.load(rec["embeddings_path"], allow_pickle=False) as arrays:
+        assert arrays["candidate_ids"].tolist() == candidates.candidate_id.tolist()
+        assert arrays["reference_ids"].tolist() == ["1"]
+    # Checkpoint provenance is checked before attempting to load model weights.
+    weights_path = Path(paths["model_weights_path"])
+    with weights_path.open("ab") as stream:
+        stream.write(b"changed")
+    with pytest.raises(ValueError, match="weights no longer matches"):
+        build_index(config_path)
+    with weights_path.open("r+b") as stream:
+        stream.truncate(weights_path.stat().st_size - len(b"changed"))
+    image_path = data / "images" / "item.jpg"
+    hidden_path = image_path.with_suffix(".hidden")
+    image_path.rename(hidden_path)
+    with pytest.raises(FileNotFoundError, match="candidate product images missing"):
+        build_index(config_path)
+    hidden_path.rename(image_path)
+    # A modified candidate file must never silently retain stale scores or lineage.
+    with open(rec["candidates_path"], "a") as stream:
+        stream.write("\n")
+    with pytest.raises(ValueError, match="changed after generation"):
+        build_index(config_path)
 
 
 def test_training_step_updates_weights_and_returns_loss():

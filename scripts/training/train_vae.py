@@ -1,5 +1,6 @@
 """Train the original reconstruction objective using the shared model."""
 
+import json
 import pickle
 import time
 
@@ -7,7 +8,7 @@ import tensorflow as tf
 
 from src.data_processing.image_processing import parse_tfrecord_fn
 from src.models.vae256 import Conv_VAE
-from src.utils.setup_utilities import ensure_parent, load_config
+from src.utils.setup_utilities import ensure_parent, file_digest, load_config
 from src.utils.train_utilities import generate_and_save_images, train_step
 
 
@@ -66,6 +67,24 @@ def train_outfit_embeddings(config_path=None):
                     },
                     stream,
                 )
+            manifest = {
+                "objective": "mean_pixel_binary_cross_entropy_without_kl",
+                "embedding_type": "posterior_mean",
+                "epoch": epoch,
+                "sha256": {
+                    key: file_digest(path)
+                    for key, path in {
+                        "weights": training["model_weights_path"],
+                        "training_records": training["train_dataset_path"],
+                        "training_outfits": data["outfits_w_products_path"],
+                    }.items()
+                },
+            }
+            manifest_path = training.get(
+                "model_manifest_path", training["model_weights_path"] + ".json"
+            )
+            with open(ensure_parent(manifest_path), "w") as stream:
+                json.dump(manifest, stream, indent=2)
             if samples is not None:
                 generate_and_save_images(
                     model, epoch, samples, training["epoch_images_path"]
