@@ -67,3 +67,11 @@ class Conv_VAE(tf.keras.Model):
         z = self.reparameterize(mean, logvar)
         reconstructed = self.decoder(z)
         return reconstructed
+
+
+def load_trained_model(weights_path):
+    """Rebuild the architecture and load weights saved by the training script."""
+    model = Conv_VAE()
+    model(tf.zeros((1, 128, 96 * 10, 3)))
+    model.load_weights(weights_path)
+    return model

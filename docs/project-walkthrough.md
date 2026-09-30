@@ -31,6 +31,9 @@ There are ten available slots but at most nine occupied slots: the top/bottom ba
 | `src/models/vae256.py` | Encoder, sampling, decoder |
 | `src/utils/train_utilities.py` | Shared loss, gradient update, previews |
 | `scripts/training/train_vae.py` | Batching, epochs, checkpoints, embeddings |
+| `src/generation/` | Candidate sampling, candidate encoding, nearest-training-embedding distance and ranking |
+| `scripts/generation/generate_outfits.py` | Offline generation run |
+| `notebooks/training.ipynb`, `notebooks/outfit-generation.ipynb` | Training and generation, calling the code above |
 | `tests/test_pipeline.py` | Synthetic regressions and actual-model smoke test |
 
 The notebook and report remain historical artifacts; saved outputs have not been regenerated. The notebook assumes it starts inside the notebooks directory when changing its working directory.
@@ -52,11 +55,11 @@ The loss rewards pixel reconstruction, not human judgments of compatibility. Whi
 | 128- versus 256-dimensional comparison | Only the 256-dimensional model |
 | Maximizing ELBO | Reconstruction cross entropy; no KL/prior regularization |
 | 42 configurations, 2,303 selected outfits | Historical counts; corrected rules allow 64 configurations and require rerunning |
-| 100,000 generated candidates | Candidate generation absent |
-| Ranking by nearest training embedding | Retrieval/ranking code absent |
+| 100,000 generated candidates | `scripts/generation/generate_outfits.py` (`num_candidates`), not yet run on full data |
+| Ranking by nearest training embedding | `src/generation/retrieval.py`, using posterior means instead of sampled `z` |
 | Qualitative recommendations | Report figures, without executable evaluation |
 
-Your proposed retrieval method moves expensive work offline: generate candidates, encode them, find their distances to training embeddings, then serve highly ranked candidates containing the requested product. This is an experiment worth testing, but distance to a known outfit is a hypothesis for compatibility, not a validated score. The checked-in code cannot reproduce these recommendation examples.
+Your proposed retrieval method moves expensive work offline: generate candidates, encode them, find their distances to training embeddings, then serve highly ranked candidates containing the requested product. This is an experiment worth testing, but distance to a known outfit is a hypothesis for compatibility, not a validated score. Reproducing the report's examples requires a retrained model and the original data.
 
 The report describes product overlap preventing a useful held-out split, then training on all selected outfits. Preview reconstruction therefore measures training examples. New-product generalization needs a separate evaluation design. A roughly bell-shaped distance histogram also does not establish the central limit theorem as its cause.
 
@@ -71,6 +74,6 @@ Image scaling, subset generation, NaN handling, and batching fixes intentionally
 1. Recover the original data and missing Colab/retrieval scripts. Rebuild records, inspect strips, and run the corrected baseline.
 2. Define evaluation for new combinations of known products versus entirely unseen products. Compare simple category/color or feature-neighbor baselines, controlling for outfit size and empty slots.
 3. Run a separate VAE experiment with a linear mean/log-variance head and explicitly scaled KL loss. Track reconstruction and KL independently.
-4. Restore candidate generation and retrieval, retaining product IDs alongside embeddings. Measure ranking quality and serving latency.
+4. Measure ranking quality and serving latency of the generation stage (for example against a color/category baseline).
 
 Refactor base: commit `e598727`, dated 2024-03-09. Full-data training and report reproduction require external data and were not performed.

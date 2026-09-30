@@ -40,3 +40,13 @@ training:
   learning_rate: 0.0001
   seed: 42
   checkpoint_every: 20
+
+generation:
+  generated_outfits_path: './data/processed/generated_outfits.csv'
+  candidate_embeddings_path: './data/processed/candidate_embeddings.npy'
+  candidate_pool: 'unseen'  # unseen | seen | all products as candidate material
+  num_candidates: 100000
+  encode_batch_size: 32
+  match_training_jpeg: true  # round-trip candidates through JPEG like training records
+  top_k: 3
+  seed: 42

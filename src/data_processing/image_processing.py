@@ -1,6 +1,9 @@
 """Float32 images in [0, 1] in memory; JPEG bytes in TFRecords."""
 
+import pandas as pd
 import tensorflow as tf
+
+from src.data_processing.schema import PRODUCT_CLASSES
 
 
 def load_and_preprocess_image(image_path, image_width, image_height):
@@ -15,6 +18,20 @@ def load_and_preprocess_image(image_path, image_width, image_height):
 
 def create_white_image(width, height):
     return tf.ones([1, height, width, 3], dtype=tf.float32)
+
+
+def build_outfit_strip(outfit, load_image, image_width, image_height):
+    """Concatenate one image per slot (white if missing) into a 1 x H x 10W x 3 strip.
+
+    `outfit` maps slot name to product ID (or NaN); `load_image` maps a product
+    ID to a 1 x H x W x 3 float tensor. Shared by training-data and inference code.
+    """
+    white = create_white_image(image_width, image_height)
+    images = [
+        white if pd.isna(outfit[slot]) else load_image(outfit[slot])
+        for slot in PRODUCT_CLASSES
+    ]
+    return tf.concat(images, axis=2)
 
 
 def _bytes_feature(value):

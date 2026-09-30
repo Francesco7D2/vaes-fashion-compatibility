@@ -1,9 +1,11 @@
 """Train the original reconstruction objective using the shared model."""
 
+import math
 import pickle
 import time
 
 import tensorflow as tf
+from tqdm import tqdm
 
 from src.data_processing.image_processing import parse_tfrecord_fn
 from src.models.vae256 import Conv_VAE
@@ -11,8 +13,8 @@ from src.utils.setup_utilities import ensure_parent, load_config
 from src.utils.train_utilities import generate_and_save_images, train_step
 
 
-def train_outfit_embeddings(config_path=None):
-    config = load_config(config_path)
+def train_outfit_embeddings(config_path=None, overrides=None):
+    config = load_config(config_path, overrides)
     data, training = config["data"], config["training"]
     for key in ("epochs", "batch_size", "checkpoint_every"):
         value = training.get(key, 20 if key == "checkpoint_every" else 0)
@@ -26,6 +28,10 @@ def train_outfit_embeddings(config_path=None):
     )
     dataset = dataset.map(lambda image: tf.ensure_shape(image, (128, 960, 3)))
     dataset = dataset.batch(training["batch_size"]).prefetch(tf.data.AUTOTUNE)
+    num_batches = math.ceil(
+        sum(1 for _ in tf.data.TFRecordDataset(training["train_dataset_path"]))
+        / training["batch_size"]
+    )
     samples = list(
         tf.data.TFRecordDataset(training["train_sample_path"]).map(parse_tfrecord_fn)
     )
@@ -34,19 +40,30 @@ def train_outfit_embeddings(config_path=None):
     model(tf.zeros((1, 128, 960, 3)))
     optimizer = tf.keras.optimizers.Adam(training.get("learning_rate", 1e-4))
     history = []
+    devices = [device.name for device in tf.config.list_physical_devices("GPU")]
+    print(f"Training on {devices[0] if devices else 'CPU'}; {num_batches} batches per epoch")
     for epoch in range(1, training["epochs"] + 1):
         start = time.monotonic()
         metric = tf.keras.metrics.Mean()
-        for batch in dataset:
+        progress = tqdm(
+            dataset,
+            total=num_batches,
+            desc=f"Epoch {epoch}/{training['epochs']}",
+            unit="batch",
+            leave=False,
+        )
+        for batch in progress:
             metric.update_state(
                 train_step(model, batch, optimizer),
                 sample_weight=tf.cast(tf.shape(batch)[0], tf.float32),
             )
+            progress.set_postfix(loss=f"{metric.result().numpy():.5f}")
+        progress.close()
         if not int(metric.count.numpy()):
             raise ValueError("Training dataset is empty")
         history.append(float(metric.result().numpy()))
-        print(
-            f"Epoch {epoch}: reconstruction_loss={history[-1]:.6f}; "
+        tqdm.write(
+            f"Epoch {epoch}/{training['epochs']}: reconstruction_loss={history[-1]:.6f}; "
             f"seconds={time.monotonic() - start:.1f}"
         )
         if (

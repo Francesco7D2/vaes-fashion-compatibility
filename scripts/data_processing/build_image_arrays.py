@@ -5,7 +5,7 @@ import tensorflow as tf
 from tqdm import tqdm
 
 from src.data_processing.image_processing import (
-    create_white_image,
+    build_outfit_strip,
     load_and_preprocess_image,
     serialize_image,
 )
@@ -28,7 +28,6 @@ def build_image_arrays(compact=False, config_path=None):
         "des_filename"
     ]
     width, height = data["image_width"], data["image_height"]
-    white = create_white_image(width, height)
     samples = set(training["train_sample_indices"])
     if any(index < 0 or index >= len(outfits) for index in samples):
         raise ValueError("train_sample_indices must refer to existing outfit rows")
@@ -39,15 +38,16 @@ def build_image_arrays(compact=False, config_path=None):
         ) as sample_writer,
     ):
         for index, (_, row) in enumerate(tqdm(outfits.iterrows(), total=len(outfits))):
-            images = []
-            for slot in PRODUCT_CLASSES:
-                product = row[slot]
-                images.append(
-                    white
-                    if pd.isna(product)
-                    else load_and_preprocess_image(paths.loc[product], width, height)
+            record = serialize_image(
+                build_outfit_strip(
+                    row,
+                    lambda product: load_and_preprocess_image(
+                        paths.loc[product], width, height
+                    ),
+                    width,
+                    height,
                 )
-            record = serialize_image(tf.concat(images, axis=2))
+            )
             writer.write(record)
             if index in samples:
                 sample_writer.write(record)

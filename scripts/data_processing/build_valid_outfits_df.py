@@ -8,7 +8,10 @@ from src.data_processing.group_manipulation import (
     create_configurations,
     select_valid_outfits,
 )
-from src.data_processing.product_processing import get_des_product_class
+from src.data_processing.product_processing import (
+    get_des_product_class,
+    resolve_image_path,
+)
 from src.utils.setup_utilities import ensure_parent, load_config
 
 
@@ -34,15 +37,9 @@ def build_valid_outfits_df(config_path=None):
     )
     data_root = Path(data["outfits_path"]).parent.parent
 
-    def image_path(value):
-        path = Path(value)
-        if path.parts and path.parts[0] == "datathon":
-            path = data_root.joinpath(*path.parts[1:])
-        elif not path.is_absolute():
-            path = data_root.parent / path
-        return str(path.resolve())
-
-    selected["des_filename"] = selected["des_filename"].map(image_path)
+    selected["des_filename"] = selected["des_filename"].map(
+        lambda value: resolve_image_path(value, data_root)
+    )
     selected.to_csv(ensure_parent(data["valid_outfits_path"]), index=False)
     return selected
 

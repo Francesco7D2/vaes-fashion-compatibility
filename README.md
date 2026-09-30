@@ -2,7 +2,7 @@
 
 A research prototype following the [UPC Datathon project](https://github.com/Francesco7D2/datathon-2023-fashion-compatibility). It learns to reconstruct complete outfits from a compressed representation of product images.
 
-**Current scope:** preprocessing, outfit-image TFRecords, a convolutional stochastic autoencoder, and embedding export. The [original report](reports/report.pdf) describes a candidate-generation and nearest-neighbor recommendation stage that is **not included** here. The notebook contains exploratory analysis and outfit selection.
+**Current scope:** preprocessing, outfit-image TFRecords, a convolutional stochastic autoencoder, embedding export, and the report's outfit generation: random candidate outfits are encoded and ranked by latent distance to the training outfits. The [original report](reports/report.pdf) figures are historical and not reproduced by this code.
 
 Read [the project walkthrough](docs/project-walkthrough.md) for architecture, report/code discrepancies, and research next steps.
 
@@ -34,22 +34,54 @@ Product metadata must contain one row per product ID. IDs are strings to retain 
 Edit `config.yml`, then run from the repository root:
 
 ```bash
+python -m scripts.pipeline                # preprocessing + training
+python -m scripts.pipeline all            # ... plus outfit generation
+python -m scripts.pipeline train generate # reuse already prepared data
+python -m scripts.pipeline all --resume   # skip steps whose outputs are up to date
+python -m scripts.pipeline --dry-run      # print the plan without running it
+```
+
+Stages are `preprocess`, `train`, `generate` and `all`. Options: `--config PATH`, `--epochs N`, `--batch-size N`, `--num-candidates N`. Missing input files are reported before any step starts, and progress is logged to the console and `reports/logs/pipeline.log`.
+
+Each step is also available on its own (use module invocation; direct script-file invocation is not supported):
+
+```bash
 python -m scripts.data_processing.build_valid_outfits_df
 python -m scripts.data_processing.build_outfit_w_products_df
 python -m scripts.data_processing.build_image_arrays
 python -m scripts.training.train_vae
+python -m scripts.generation.generate_outfits
 ```
 
-Use module invocation (`python -m`); direct script-file invocation is no longer supported. Each pipeline function also accepts `config_path` for a custom YAML file. Configured paths resolve relative to that file. Output directories are created automatically.
+Each step function also accepts `config_path` for a custom YAML file. Configured paths resolve relative to that file. Output directories are created automatically.
 
 1. Select outfits matching dress + footwear + earrings, or top + bottom + footwear + earrings, plus any subset of five optional classes.
 2. Create a table with one row per outfit and ten product slots.
 3. Resize images to 128 × 96 and concatenate horizontally. Missing products become white slots. Write full and preview TFRecords.
 4. Train the 256-dimensional model and export weights, embeddings, loss history, and previews.
+5. Generate outfits (see below).
 
 Slot order: Tops, Bottoms, Outerwear, Dresses/jumpsuits/complete sets, Footwear, Bags, Glasses, Earrings, Ring, Necklace. Model input is 128 × 960 × 3. Channel-stacked images are unsupported.
 
 `train_sample_indices` are zero-based positions in the generated outfit table; update them for your data. These are training previews, not held-out evaluation. `batch_size` now controls actual batching; reduce it if memory is limited. Default duration is 400 epochs.
+
+## Outfit generation
+
+`scripts/generation/generate_outfits.py` (settings under `generation:` in `config.yml`):
+
+1. Draw `num_candidates` random outfits. The slot pattern follows the frequency of patterns among training outfits; products come from `candidate_pool` (`unseen` = never in a training outfit, as in the report).
+2. Encode each candidate to its posterior mean, using the same strip construction as training (including the JPEG round trip of the TFRecords).
+3. Score it by the Euclidean distance to the nearest training embedding.
+4. Write `generated_outfits.csv` (slots, `distance`, `distance_percentile`, `nearest_training_row`) and `candidate_embeddings.npy`.
+
+To recommend for a product, `src.generation.retrieval.rank_for_product(generated, product_id, k)` returns the closest candidates containing it. Distance to a known outfit is a hypothesis for compatibility, not a validated score. Encoding 100,000 candidates took about 30 minutes on a Colab T4 (per the report).
+
+## Notebooks
+
+Both notebooks only call code from `src/` and `scripts/` and are committed without outputs. Set `FASHION_CONFIG` to use a different config file.
+
+- `notebooks/training.ipynb`: outfit strips, model, optional short demo training (writes to `models/demo/`), loss curve, reconstructions, latent-space projection.
+- `notebooks/outfit-generation.ipynb`: candidates, encoding, distances, closest/farthest candidates beside their nearest training outfit, and recommendations for a product.
 
 ## Objective and outputs
 
