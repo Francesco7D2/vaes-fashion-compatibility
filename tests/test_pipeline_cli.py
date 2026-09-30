@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-import tensorflow as tf
 import yaml
+from PIL import Image
 
 from scripts import pipeline
 from src.utils.setup_utilities import load_config
@@ -15,7 +15,7 @@ def project(tmp_path):
     data = tmp_path / "data"
     (data / "tabular").mkdir(parents=True)
     (data / "images").mkdir()
-    image = tf.io.encode_jpeg(tf.zeros((16, 16, 3), tf.uint8))
+    image = Image.new("RGB", (16, 16))
     classes = [
         ("Dresses, jumpsuits and Complete set", "Dresses", "Dress"),
         ("Accesories, Swim and Intimate", "Footwear", "Boots"),
@@ -24,7 +24,7 @@ def project(tmp_path):
     rows = []
     for index, (category, family, kind) in enumerate(classes * 2):
         code = f"{index:03d}"
-        tf.io.write_file(str(data / "images" / f"{code}.jpg"), image)
+        image.save(data / "images" / f"{code}.jpg")
         rows.append((code, category, family, kind, f"datathon/images/{code}.jpg"))
     pd.DataFrame(
         rows,
@@ -98,6 +98,13 @@ def test_full_run_then_resume_skips_up_to_date_steps(project):
 def test_cli_overrides_reach_the_config():
     args = pipeline.build_parser().parse_args(["train", "--epochs", "2"])
     assert pipeline._overrides(args) == {"training": {"epochs": 2}}
+    args = pipeline.build_parser().parse_args(["--device", "cpu"])
+    assert pipeline._overrides(args) == {
+        "training": {"device": "cpu"},
+        "generation": {"device": "cpu"},
+    }
+    with pytest.raises(SystemExit):
+        pipeline.build_parser().parse_args(["--device", "tpu"])
     assert pipeline._overrides(pipeline.build_parser().parse_args([])) == {}
 
 

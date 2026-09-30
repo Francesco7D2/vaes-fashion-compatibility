@@ -1,13 +1,15 @@
-"""Build full and preview TFRecords in one pass."""
+"""Build full and preview strip archives in one pass."""
+
+from functools import lru_cache
 
 import pandas as pd
-import tensorflow as tf
 from tqdm import tqdm
 
 from src.data_processing.image_processing import (
     build_outfit_strip,
+    encode_jpeg,
     load_and_preprocess_image,
-    serialize_image,
+    save_strips,
 )
 from src.data_processing.schema import PRODUCT_CLASSES
 from src.utils.setup_utilities import ensure_parent, load_config
@@ -28,29 +30,23 @@ def build_image_arrays(compact=False, config_path=None):
         "des_filename"
     ]
     width, height = data["image_width"], data["image_height"]
-    samples = set(training["train_sample_indices"])
+    samples = list(dict.fromkeys(training["train_sample_indices"]))
     if any(index < 0 or index >= len(outfits) for index in samples):
         raise ValueError("train_sample_indices must refer to existing outfit rows")
-    with (
-        tf.io.TFRecordWriter(ensure_parent(training["train_dataset_path"])) as writer,
-        tf.io.TFRecordWriter(
-            ensure_parent(training["train_sample_path"])
-        ) as sample_writer,
-    ):
-        for index, (_, row) in enumerate(tqdm(outfits.iterrows(), total=len(outfits))):
-            record = serialize_image(
-                build_outfit_strip(
-                    row,
-                    lambda product: load_and_preprocess_image(
-                        paths.loc[product], width, height
-                    ),
-                    width,
-                    height,
-                )
-            )
-            writer.write(record)
-            if index in samples:
-                sample_writer.write(record)
+
+    @lru_cache(maxsize=None)
+    def load_image(product):
+        return load_and_preprocess_image(paths.loc[product], width, height)
+
+    records = [
+        encode_jpeg(build_outfit_strip(row, load_image, width, height))
+        for _, row in tqdm(outfits.iterrows(), total=len(outfits))
+    ]
+    save_strips(ensure_parent(training["train_dataset_path"]), records)
+    # Previews follow the configured order, so titles can use the same list.
+    save_strips(
+        ensure_parent(training["train_sample_path"]), [records[i] for i in samples]
+    )
 
 
 if __name__ == "__main__":

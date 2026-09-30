@@ -5,6 +5,7 @@
     python -m scripts.pipeline train generate       # reuse prepared data
     python -m scripts.pipeline all --resume         # skip steps that are up to date
     python -m scripts.pipeline --dry-run            # show the plan and exit
+    python -m scripts.pipeline train --device cpu   # force a device (default: auto)
 """
 
 import argparse
@@ -15,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from src.utils.setup_utilities import PROJECT_ROOT, ensure_parent, load_config
+from src.utils.setup_utilities import DEVICES, PROJECT_ROOT, ensure_parent, load_config
 
 LOGGER = logging.getLogger("pipeline")
 LOG_FILE = str(PROJECT_ROOT / "reports/logs/pipeline.log")
@@ -209,13 +210,22 @@ def build_parser():
     parser.add_argument(
         "--num-candidates", type=int, help="override generation.num_candidates"
     )
+    parser.add_argument(
+        "--device",
+        choices=DEVICES,
+        help="override training.device and generation.device (default: auto)",
+    )
     return parser
 
 
 def _overrides(args):
     values = {
-        "training": {"epochs": args.epochs, "batch_size": args.batch_size},
-        "generation": {"num_candidates": args.num_candidates},
+        "training": {
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "device": args.device,
+        },
+        "generation": {"num_candidates": args.num_candidates, "device": args.device},
     }
     values = {
         section: {key: value for key, value in items.items() if value is not None}

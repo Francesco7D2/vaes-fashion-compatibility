@@ -1,77 +1,85 @@
-import tensorflow as tf
+import torch
+from torch import nn
+
+from src.utils.torch_utilities import resolve_device
 
 
-class Conv_VAE(tf.keras.Model):
+def _conv(in_channels, out_channels):
+    return nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+
+
+class Conv_VAE(nn.Module):
     """Original 256-dimensional stochastic convolutional autoencoder.
 
     Architecture is preserved; the training objective currently omits KL loss.
+    Tensors are N x C x H x W: inputs are 3 x 128 x 960 in [0, 1] (see
+    `src.utils.torch_utilities.to_model_input`). Weights are Glorot-uniform,
+    biases zero.
     """
+
+    latent_dim = 256
 
     def __init__(self):
         super().__init__()
-        self.latent_dim = 256
-        self.encoder = tf.keras.Sequential(
-            [
-                tf.keras.layers.InputLayer(shape=(128, 96 * 10, 3)),
-                tf.keras.layers.Conv2D(filters=4, kernel_size=(3, 3), padding="same"),
-                tf.keras.layers.Conv2D(filters=4, kernel_size=(3, 3), padding="same"),
-                tf.keras.layers.MaxPooling2D(),
-                tf.keras.layers.Conv2D(filters=8, kernel_size=(3, 3), padding="same"),
-                tf.keras.layers.Conv2D(filters=8, kernel_size=(3, 3), padding="same"),
-                tf.keras.layers.MaxPooling2D(),
-                tf.keras.layers.Flatten(),
-                tf.keras.layers.Dense(512, activation=tf.nn.relu),
-                tf.keras.layers.Dense(256, activation=tf.nn.relu),
-                tf.keras.layers.Dense(512, activation=tf.nn.relu),
-            ]
+        self.encoder = nn.Sequential(
+            _conv(3, 4),
+            _conv(4, 4),
+            nn.MaxPool2d(2),
+            _conv(4, 8),
+            _conv(8, 8),
+            nn.MaxPool2d(2),
+            nn.Flatten(),
+            nn.Linear(8 * 32 * 240, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Linear(256, 512),
+            nn.ReLU(),
         )
-
-        self.decoder = tf.keras.Sequential(
-            [
-                tf.keras.layers.InputLayer(shape=(256,)),
-                tf.keras.layers.Dense(units=32 * 240 * 8, activation=tf.nn.relu),
-                tf.keras.layers.Reshape(target_shape=(32, 240, 8)),
-                tf.keras.layers.UpSampling2D(),
-                tf.keras.layers.Conv2D(filters=8, kernel_size=(3, 3), padding="same"),
-                tf.keras.layers.Conv2D(filters=8, kernel_size=(3, 3), padding="same"),
-                tf.keras.layers.UpSampling2D(),
-                tf.keras.layers.Conv2D(filters=8, kernel_size=(3, 3), padding="same"),
-                tf.keras.layers.Conv2D(filters=8, kernel_size=(3, 3), padding="same"),
-                tf.keras.layers.Conv2D(filters=3, kernel_size=(3, 3), padding="same"),
-            ]
+        self.decoder = nn.Sequential(
+            nn.Linear(256, 8 * 32 * 240),
+            nn.ReLU(),
+            nn.Unflatten(1, (8, 32, 240)),
+            nn.Upsample(scale_factor=2),
+            _conv(8, 8),
+            _conv(8, 8),
+            nn.Upsample(scale_factor=2),
+            _conv(8, 8),
+            _conv(8, 8),
+            _conv(8, 3),
         )
+        for module in self.modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.xavier_uniform_(module.weight)
+                nn.init.zeros_(module.bias)
 
     def sample(self, eps=None):
         if eps is None:
-            eps = tf.random.normal(shape=(100, self.latent_dim))
+            eps = torch.randn(100, self.latent_dim, device=self.encoder[0].weight.device)
         return self.decode(eps, apply_sigmoid=True)
 
     def encode(self, x):
-        mean, logvar = tf.split(self.encoder(x), num_or_size_splits=2, axis=1)
+        mean, logvar = self.encoder(x).chunk(2, dim=1)
         return mean, logvar
 
     def reparameterize(self, mean, logvar):
-        eps = tf.random.normal(shape=tf.shape(mean))
-        return eps * tf.exp(logvar * 0.5) + mean
+        eps = torch.randn_like(mean)
+        return eps * torch.exp(logvar * 0.5) + mean
 
     def decode(self, z, apply_sigmoid=False):
         logits = self.decoder(z)
         if apply_sigmoid:
-            probs = tf.sigmoid(logits)
-            return probs
+            return torch.sigmoid(logits)
         return logits
 
-    def call(self, inputs, training=None, mask=None):
-        x = self.encoder(inputs)
-        mean, logvar = tf.split(x, num_or_size_splits=2, axis=1)
-        z = self.reparameterize(mean, logvar)
-        reconstructed = self.decoder(z)
-        return reconstructed
+    def forward(self, x):
+        mean, logvar = self.encode(x)
+        return self.decoder(self.reparameterize(mean, logvar))
 
 
-def load_trained_model(weights_path):
+def load_trained_model(weights_path, device="auto"):
     """Rebuild the architecture and load weights saved by the training script."""
+    device = resolve_device(device) if isinstance(device, str) else device
     model = Conv_VAE()
-    model(tf.zeros((1, 128, 96 * 10, 3)))
-    model.load_weights(weights_path)
-    return model
+    model.load_state_dict(torch.load(weights_path, map_location="cpu", weights_only=True))
+    return model.to(device).eval()

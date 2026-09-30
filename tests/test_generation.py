@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import pytest
-import tensorflow as tf
+import torch
+from PIL import Image
 
 from src.data_processing.schema import PRODUCT_CLASSES
 from src.generation.candidates import (
@@ -121,29 +122,30 @@ def test_encoding_shapes_determinism_and_weight_loading(tmp_path, training_outfi
     files = {}
     for index, product in enumerate(["d1", "f1", "e1"]):
         path = tmp_path / f"{product}.jpg"
-        tf.io.write_file(
-            str(path), tf.io.encode_jpeg(tf.fill((20, 20, 3), tf.constant(60 * index + 40, tf.uint8)))
-        )
+        Image.new("RGB", (20, 20), (60 * index + 40,) * 3).save(path)
         files[product] = str(path)
     images = ProductImages(pd.Series(files), 96, 128)
     first = images("d1")
-    assert first.shape == (1, 128, 96, 3) and first.dtype == tf.float32
+    assert first.shape == (128, 96, 3) and first.dtype == np.uint8
+    assert images("d1") is first  # cached
     outfit = wide([[np.nan] * 3 + ["d1", "f1", np.nan, np.nan, "e1", np.nan, np.nan]] * 3)
     model = Conv_VAE()
-    model(tf.zeros((1, 128, 960, 3)))
     embeddings = encode_outfits(model, outfit, images, batch_size=2, progress=False)
     assert embeddings.shape == (3, 256)
-    np.testing.assert_allclose(embeddings[0], embeddings[2], atol=1e-5)
+    # Rows 0 and 2 are encoded in batches of different sizes; float32 sums over
+    # 61,440 inputs then differ slightly.
+    np.testing.assert_allclose(embeddings[0], embeddings[2], atol=1e-4)
     raw = encode_outfits(
         model, outfit, images, batch_size=3, match_training_jpeg=False, progress=False
     )
     assert np.abs(raw - embeddings).max() < 1  # JPEG round trip is a small perturbation
     assert encode_outfits(model, outfit.iloc[:0], images, progress=False).shape == (0, 256)
-    weights = tmp_path / "model.weights.h5"
-    model.save_weights(weights)
-    restored = load_trained_model(weights)
+    weights = tmp_path / "model.pt"
+    torch.save(model.state_dict(), weights)
+    restored = load_trained_model(weights, "cpu")
+    assert not restored.training
     np.testing.assert_allclose(
-        encode_outfits(restored, outfit, images, progress=False), embeddings, atol=1e-5
+        encode_outfits(restored, outfit, images, progress=False), embeddings, atol=1e-4
     )
 
 

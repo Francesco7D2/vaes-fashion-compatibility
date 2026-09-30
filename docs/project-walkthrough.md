@@ -26,15 +26,16 @@ There are ten available slots but at most nine occupied slots: the top/bottom ba
 | `src/data_processing/product_processing.py` | Derive product class from category/family/type |
 | `src/data_processing/group_manipulation.py` | EDA helpers, subsets, outfit selection |
 | `src/data_processing/schema.py` | Canonical slot order |
-| `src/data_processing/image_processing.py` | Image loading and TFRecord serialization |
+| `src/data_processing/image_processing.py` | Image loading, JPEG strip archives |
 | `scripts/data_processing/` | Three ordered preprocessing entry points |
-| `src/models/vae256.py` | Encoder, sampling, decoder |
-| `src/utils/train_utilities.py` | Shared loss, gradient update, previews |
+| `src/models/vae256.py` | Encoder, sampling, decoder (PyTorch) |
+| `src/utils/torch_utilities.py` | Device choice (CUDA, Apple GPU, CPU), image/tensor layout |
+| `src/utils/train_utilities.py` | Shared loss, optimizer, gradient update, previews |
 | `scripts/training/train_vae.py` | Batching, epochs, checkpoints, embeddings |
 | `src/generation/` | Candidate sampling, candidate encoding, nearest-training-embedding distance and ranking |
 | `scripts/generation/generate_outfits.py` | Offline generation run |
 | `notebooks/training.ipynb`, `notebooks/outfit-generation.ipynb` | Training and generation, calling the code above |
-| `tests/test_pipeline.py` | Synthetic regressions and actual-model smoke test |
+| `tests/` | Synthetic regressions, actual-model smoke test, GPU/CPU gradient parity |
 
 The notebook and report remain historical artifacts; saved outputs have not been regenerated. The notebook assumes it starts inside the notebooks directory when changing its working directory.
 

@@ -49,7 +49,9 @@ def generate_outfits(config_path=None, overrides=None):
         generation["num_candidates"],
         generation["seed"],
     )
-    model = load_trained_model(training["model_weights_path"])
+    model = load_trained_model(
+        training["model_weights_path"], generation.get("device", "auto")
+    )
     images = ProductImages(
         catalog.set_index("cod_modelo_color")["des_filename"],
         config["data"]["image_width"],

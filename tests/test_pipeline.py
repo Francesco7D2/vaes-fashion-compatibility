@@ -3,8 +3,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-import tensorflow as tf
+import torch
 import yaml
+from PIL import Image
 
 from scripts.data_processing.build_image_arrays import build_image_arrays
 from scripts.data_processing.build_outfit_w_products_df import build_outfit_w_products
@@ -15,10 +16,16 @@ from src.data_processing.group_manipulation import (
     create_configurations,
     select_valid_outfits,
 )
-from src.data_processing.image_processing import parse_tfrecord_fn, serialize_image
+from src.data_processing.image_processing import (
+    encode_jpeg,
+    jpeg_round_trip,
+    load_and_preprocess_image,
+    load_strips,
+    save_strips,
+)
 from src.data_processing.schema import PRODUCT_CLASSES
 from src.utils.setup_utilities import load_config
-from src.utils.train_utilities import compute_loss, train_step
+from src.utils.train_utilities import compute_loss, make_optimizer, train_step
 
 
 def test_all_optional_subsets():
@@ -59,23 +66,40 @@ def test_selection_handles_missing_sizes_nine_items_and_duplicates():
     assert empty.empty and counts == {}
 
 
-@pytest.mark.parametrize("brightness", [0.0, 0.5, 1.0])
-def test_tfrecord_roundtrip_preserves_brightness(brightness):
-    image = tf.fill((1, 16, 16, 3), brightness)
-    decoded = parse_tfrecord_fn(serialize_image(image))
-    assert decoded.dtype == tf.float32
+@pytest.mark.parametrize("brightness", [0, 128, 255])
+def test_jpeg_roundtrip_preserves_brightness(brightness):
+    decoded = jpeg_round_trip(np.full((16, 16, 3), brightness, np.uint8))
+    assert decoded.dtype == np.uint8
     assert decoded.shape == (16, 16, 3)
-    np.testing.assert_allclose(decoded.numpy(), brightness, atol=2 / 255)
+    np.testing.assert_allclose(decoded, brightness, atol=2)
+
+
+def test_strip_archive_roundtrip_keeps_order(tmp_path):
+    strips = [np.full((8, 40, 3), value, np.uint8) for value in (0, 90, 255)]
+    path = tmp_path / "strips.bin"  # any suffix: nothing is appended
+    save_strips(path, [encode_jpeg(strip) for strip in strips])
+    loaded = load_strips(path, workers=2)
+    assert loaded.shape == (3, 8, 40, 3) and loaded.dtype == np.uint8
+    np.testing.assert_allclose(loaded.mean(axis=(1, 2, 3)), [0, 90, 255], atol=2)
+    save_strips(tmp_path / "empty.npz", [])
+    assert len(load_strips(tmp_path / "empty.npz")) == 0
+
+
+def test_resize_is_bilinear_without_antialiasing(tmp_path):
+    # With half-pixel centres, halving the size averages each 2 x 2 block;
+    # an antialiased filter would blur further.
+    pixels = np.random.default_rng(0).integers(0, 256, (8, 6, 3), dtype=np.uint8)
+    Image.fromarray(pixels).save(tmp_path / "image.png")
+    resized = load_and_preprocess_image(tmp_path / "image.png", 3, 4)
+    blocks = pixels.reshape(4, 2, 3, 2, 3).astype(float).mean(axis=(1, 3))
+    np.testing.assert_allclose(resized, blocks, atol=0.51)  # uint8 rounding only
 
 
 def test_csv_to_records_pipeline(tmp_path):
     data = tmp_path / "data"
     (data / "tabular").mkdir(parents=True)
     (data / "images").mkdir()
-    tf.io.write_file(
-        str(data / "images" / "item.jpg"),
-        tf.io.encode_jpeg(tf.zeros((16, 16, 3), tf.uint8)),
-    )
+    Image.new("RGB", (16, 16)).save(data / "images" / "item.jpg")
     products = pd.DataFrame(
         [
             ["001", "Dresses, jumpsuits and Complete set", "Dresses", "Dress"],
@@ -104,15 +128,11 @@ def test_csv_to_records_pipeline(tmp_path):
     assert list(wide.columns) == ["cod_outfit", *PRODUCT_CLASSES]
     build_image_arrays(config_path=config_path)
     paths = load_config(config_path)["training"]
-    records = list(
-        tf.data.TFRecordDataset(paths["train_dataset_path"]).as_numpy_iterator()
-    )
-    previews = list(
-        tf.data.TFRecordDataset(paths["train_sample_path"]).as_numpy_iterator()
-    )
-    assert records == previews and len(records) == 1
-    image = parse_tfrecord_fn(records[0]).numpy()
-    assert image.shape == (128, 960, 3)
+    records = load_strips(paths["train_dataset_path"])
+    previews = load_strips(paths["train_sample_path"])
+    np.testing.assert_array_equal(records, previews)
+    assert records.shape == (1, 128, 960, 3)
+    image = records[0] / 255
     assert image[:, :96].mean() > 0.98  # Missing Tops slot stays white.
     assert image[:, 3 * 96 : 4 * 96].mean() < 0.02  # Dress stays black.
     with pytest.raises(ValueError, match="Channel-stacked"):
@@ -130,20 +150,16 @@ def test_csv_to_records_pipeline(tmp_path):
         exported = pickle.load(stream)
     assert exported["latent_space"].shape == (1, 256)
     assert exported["embedding_type"] == "posterior_mean"
-    assert model.decode(tf.zeros((1, model.latent_dim))).shape == (1, 128, 960, 3)
+    device = next(model.parameters()).device
+    assert model.decode(torch.zeros(1, model.latent_dim, device=device)).shape == (1, 3, 128, 960)
 
 
 def test_training_step_updates_weights_and_returns_loss():
-    model = tf.keras.Sequential(
-        [tf.keras.layers.Input((2, 2, 3)), tf.keras.layers.Conv2D(3, 1)]
-    )
-    batch = tf.ones((2, 2, 2, 3))
-    before = [v.numpy().copy() for v in model.trainable_variables]
-    optimizer = tf.keras.optimizers.Adam(0.01)
+    model = torch.nn.Conv2d(3, 3, 1)
+    batch = torch.ones(2, 3, 2, 2)
+    before = [p.detach().clone() for p in model.parameters()]
+    optimizer = make_optimizer(model, 0.01)
     loss = train_step(model, batch, optimizer)
-    assert np.isfinite(loss.numpy())
-    assert any(
-        not np.array_equal(old, new.numpy())
-        for old, new in zip(before, model.trainable_variables)
-    )
-    assert np.isfinite(compute_loss(model, batch).numpy())
+    assert loss.ndim == 0 and not loss.requires_grad and np.isfinite(loss.item())
+    assert any(not torch.equal(old, new) for old, new in zip(before, model.parameters()))
+    assert np.isfinite(compute_loss(model, batch).item())

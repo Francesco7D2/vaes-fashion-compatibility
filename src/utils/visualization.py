@@ -3,9 +3,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import tensorflow as tf
+import torch
 
 from src.data_processing.schema import PRODUCT_CLASSES
+from src.utils.torch_utilities import to_images, to_model_input
 
 
 def split_strip(strip, num_slots=len(PRODUCT_CLASSES)):
@@ -17,7 +18,8 @@ def show_strips(strips, titles=None, label_slots=True):
     """One row per 128 x 960 strip, slot names on the first row."""
     fig, axes = plt.subplots(len(strips), 1, figsize=(14, 1.6 * len(strips) + 0.6), squeeze=False)
     for index, (axis, strip) in enumerate(zip(axes[:, 0], strips)):
-        axis.imshow(np.clip(np.asarray(strip), 0, 1))
+        strip = np.asarray(strip)
+        axis.imshow(strip if strip.dtype == np.uint8 else np.clip(strip, 0, 1))
         axis.set_xticks([])
         axis.set_yticks([])
         if titles is not None:
@@ -42,7 +44,7 @@ def show_outfits(outfits, images, titles=None, max_cols=9):
     for r, row in enumerate(rows):
         products = [(s, row[s]) for s in PRODUCT_CLASSES if not pd.isna(row[s])]
         for c, (slot, product) in enumerate(products[:max_cols]):
-            axes[r, c].imshow(images(product)[0].numpy())
+            axes[r, c].imshow(images(product))
             axes[r, c].set_title(slot.split(",")[0], fontsize=7)
         if titles is not None:
             axes[r, 0].text(-0.1, 0.5, titles[r], transform=axes[r, 0].transAxes,
@@ -70,10 +72,11 @@ def plot_distance_histogram(distances, marks=(5, 50, 95)):
     return fig
 
 
+@torch.inference_mode()
 def reconstruct(model, strips):
-    """Deterministic reconstructions (posterior mean) of a batch of strips."""
-    mean, _ = model.encode(tf.convert_to_tensor(strips))
-    return model.decode(mean, apply_sigmoid=True).numpy()
+    """Deterministic reconstructions (posterior mean) of a batch of H x W x 3 strips."""
+    mean, _ = model.encode(to_model_input(strips, next(model.parameters()).device))
+    return to_images(model.decode(mean, apply_sigmoid=True))
 
 
 def pca_2d(embeddings):
