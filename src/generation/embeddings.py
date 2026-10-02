@@ -33,6 +33,19 @@ class ProductImages:
         return self._cache[product_id]
 
 
+@torch.inference_mode()
+def encode_strips(model, strips, batch_size=64):
+    """Posterior means of N x H x W x 3 strips (an array or a tensor on any device)."""
+    device = next(model.parameters()).device
+    means = [
+        model.encode(to_model_input(strips[start : start + batch_size], device))[0].cpu()
+        for start in range(0, len(strips), batch_size)
+    ]
+    if not means:
+        return np.zeros((0, model.latent_dim), dtype=np.float32)
+    return torch.cat(means).numpy()
+
+
 def encode_outfits(
     model, outfits, images, batch_size=32, match_training_jpeg=True, progress=True
 ):

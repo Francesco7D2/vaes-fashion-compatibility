@@ -74,7 +74,7 @@ def _figure(axis):
 def plot_loss_curve(history, axis=None):
     fig, axis = _figure(axis)
     axis.plot(range(1, len(history) + 1), history)
-    axis.set(xlabel="epoch", ylabel="mean pixel cross entropy", title="Reconstruction loss")
+    axis.set(xlabel="epoch", ylabel="loss per pixel", title="Training loss")
     axis.grid(alpha=0.3)
     return fig
 

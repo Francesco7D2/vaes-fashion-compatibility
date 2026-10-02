@@ -12,8 +12,9 @@ class Conv_VAE(nn.Module):
     """Stochastic convolutional autoencoder with a 256-dimensional latent space.
 
     The encoder outputs a mean and a log-variance per latent dimension; the
-    decoder maps a latent vector to image logits. Training uses the
-    reconstruction loss only (no KL term), so this is not a full VAE.
+    decoder maps a latent vector to image logits. By default the last encoder
+    layer is linear, as in a standard VAE; `linear_head=False` adds a ReLU,
+    which makes means and log-variances non-negative.
     Tensors are N x C x H x W: inputs are 3 x 128 x 960 in [0, 1] (see
     `src.utils.torch_utilities.to_model_input`). Weights are Glorot-uniform,
     biases zero.
@@ -21,8 +22,9 @@ class Conv_VAE(nn.Module):
 
     latent_dim = 256
 
-    def __init__(self):
+    def __init__(self, linear_head=True):
         super().__init__()
+        self.linear_head = linear_head
         self.encoder = nn.Sequential(
             _conv(3, 4),
             _conv(4, 4),
@@ -36,7 +38,7 @@ class Conv_VAE(nn.Module):
             nn.Linear(512, 256),
             nn.ReLU(),
             nn.Linear(256, 512),
-            nn.ReLU(),
+            *([] if linear_head else [nn.ReLU()]),
         )
         self.decoder = nn.Sequential(
             nn.Linear(256, 8 * 32 * 240),
@@ -79,9 +81,15 @@ class Conv_VAE(nn.Module):
         return self.decoder(self.reparameterize(mean, logvar))
 
 
+def save_model(model, path):
+    """Store the weights together with the architecture option."""
+    torch.save({"linear_head": model.linear_head, "state_dict": model.state_dict()}, path)
+
+
 def load_trained_model(weights_path, device="auto"):
-    """Rebuild the architecture and load weights saved by the training script."""
+    """Rebuild the architecture and load weights written by `save_model`."""
     device = resolve_device(device) if isinstance(device, str) else device
-    model = Conv_VAE()
-    model.load_state_dict(torch.load(weights_path, map_location="cpu", weights_only=True))
+    checkpoint = torch.load(weights_path, map_location="cpu", weights_only=True)
+    model = Conv_VAE(linear_head=checkpoint["linear_head"])
+    model.load_state_dict(checkpoint["state_dict"])
     return model.to(device).eval()

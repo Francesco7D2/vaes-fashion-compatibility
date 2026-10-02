@@ -6,6 +6,7 @@ import yaml
 from PIL import Image
 
 from scripts import pipeline
+from scripts.generation.recommend import recommend
 from src.utils.setup_utilities import load_config
 
 
@@ -88,6 +89,8 @@ def test_full_run_then_resume_skips_up_to_date_steps(project):
     config = load_config(project)
     generated = pd.read_csv(config["generation"]["generated_outfits_path"])
     assert len(generated) == 3 and (generated["distance"] >= 0).all()
+    best, _ = recommend("003", k=2, num_candidates=5, config_path=project)
+    assert len(best) >= 1 and best["Dresses, jumpsuits and Complete set"].eq("003").all()
     resumed = pipeline.run_pipeline(project, ["all"], resume=True)
     assert {status for _, status, _ in resumed} == {"up to date"}
     Path(config["data"]["outfits_path"]).touch()

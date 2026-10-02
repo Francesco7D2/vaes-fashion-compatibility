@@ -2,30 +2,30 @@
 
 import math
 import pickle
-import time
 
 import torch
-from tqdm import tqdm
 
 from src.data_processing.image_processing import load_strips
-from src.models.vae256 import Conv_VAE
+from src.generation.embeddings import encode_strips
+from src.models.vae256 import Conv_VAE, save_model
 from src.utils.setup_utilities import ensure_parent, load_config
-from src.utils.torch_utilities import resolve_device, to_model_input
-from src.utils.train_utilities import (
-    generate_and_save_images,
-    make_optimizer,
-    train_step,
-)
+from src.utils.torch_utilities import resolve_device
+from src.utils.train_utilities import fit, generate_and_save_images
+
+LOSS_OPTIONS = ("kl_weight", "foreground_weight")
 
 
-@torch.inference_mode()
-def encode_dataset(model, dataset, batch_size):
-    """Posterior means of every strip, in dataset order."""
-    means = [
-        model.encode(to_model_input(dataset[start : start + batch_size], dataset.device))[0]
-        for start in range(0, len(dataset), batch_size)
-    ]
-    return torch.cat(means).cpu().numpy()
+def training_options(training):
+    """Keyword arguments of `fit` taken from the `training` config section."""
+    options = {
+        "epochs": training["epochs"],
+        "batch_size": training["batch_size"],
+        "learning_rate": training.get("learning_rate", 1e-4),
+        "shuffle": training.get("shuffle", True),
+        "keep_best": training.get("keep_best", True),
+    }
+    options.update({key: training[key] for key in LOSS_OPTIONS if key in training})
+    return options
 
 
 def train_outfit_embeddings(config_path=None, overrides=None):
@@ -48,47 +48,30 @@ def train_outfit_embeddings(config_path=None, overrides=None):
     dataset = torch.from_numpy(strips).to(device)
     del strips
     samples = load_strips(training["train_sample_path"])
-    batch_size = training["batch_size"]
-    num_batches = math.ceil(len(dataset) / batch_size)
-    model = Conv_VAE().to(device)
-    optimizer = make_optimizer(model, training.get("learning_rate", 1e-4))
-    history = []
-    print(f"Training on {device.type}; {num_batches} batches per epoch")
-    for epoch in range(1, training["epochs"] + 1):
-        start = time.monotonic()
-        total = torch.zeros((), device=device)
-        progress = tqdm(
-            range(0, len(dataset), batch_size),
-            desc=f"Epoch {epoch}/{training['epochs']}",
-            unit="batch",
-            leave=False,
-        )
-        for index, first in enumerate(progress, start=1):
-            batch = to_model_input(dataset[first : first + batch_size], device)
-            total += train_step(model, batch, optimizer) * len(batch)
-            if index % 10 == 0:  # reading the loss waits for the GPU; do it rarely
-                seen = min(first + batch_size, len(dataset))
-                progress.set_postfix(loss=f"{total.item() / seen:.5f}")
-        progress.close()
-        history.append(total.item() / len(dataset))
-        tqdm.write(
-            f"Epoch {epoch}/{training['epochs']}: reconstruction_loss={history[-1]:.6f}; "
-            f"seconds={time.monotonic() - start:.1f}"
-        )
-        if (
-            epoch % training.get("checkpoint_every", 20) == 0
-            or epoch == training["epochs"]
-        ):
-            torch.save(model.state_dict(), ensure_parent(training["model_weights_path"]))
-            with open(ensure_parent(training["model_data_path"]), "wb") as stream:
-                pickle.dump(
-                    {
-                        "latent_space": encode_dataset(model, dataset, batch_size),
-                        "reconstruction_loss": history,
-                    },
-                    stream,
-                )
-            generate_and_save_images(model, epoch, samples, training["epoch_images_path"])
+    model = Conv_VAE(linear_head=training.get("linear_head", True)).to(device)
+    print(
+        f"Training on {device.type}; "
+        f"{math.ceil(len(dataset) / training['batch_size'])} batches per epoch"
+    )
+
+    def export(epoch, history):
+        save_model(model, ensure_parent(training["model_weights_path"]))
+        with open(ensure_parent(training["model_data_path"]), "wb") as stream:
+            pickle.dump(
+                {
+                    "latent_space": encode_strips(model, dataset, training["batch_size"]),
+                    "loss": history,
+                },
+                stream,
+            )
+        generate_and_save_images(model, epoch, samples, training["epoch_images_path"])
+
+    def checkpoint(epoch, history):
+        if epoch % training.get("checkpoint_every", 20) == 0 and epoch < training["epochs"]:
+            export(epoch, history)
+
+    history = fit(model, dataset, on_epoch=checkpoint, **training_options(training))
+    export(training["epochs"], history)  # with keep_best, the lowest-loss weights
     return model, history
 
 

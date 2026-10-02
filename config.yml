@@ -41,14 +41,27 @@ training:
   learning_rate: 0.0001
   seed: 42
   checkpoint_every: 20
+  shuffle: true  # new random order of outfits every epoch
+  keep_best: true  # export the weights of the lowest-loss epoch
+  linear_head: true  # false: ReLU on means and log-variances
+  kl_weight: 1.0  # 1.0: per-pixel negative ELBO; 0.0: reconstruction only
+  foreground_weight: 1.0  # weight of product pixels against background pixels
 
 generation:
   device: 'auto'
   generated_outfits_path: './data/processed/generated_outfits.csv'
   candidate_embeddings_path: './data/processed/candidate_embeddings.npy'
   candidate_pool: 'unseen'  # unseen | seen | all products as candidate material
+  same_catalogue: true  # all products of a candidate from one catalogue
   num_candidates: 100000
   encode_batch_size: 32
   match_training_jpeg: true  # round-trip candidates through JPEG like training records
   top_k: 3
   seed: 42
+
+evaluation:
+  held_out_share: 0.1  # outfits left out of training, stratified by configuration
+  options: 4  # true product plus decoys of the same class and catalogue
+  epochs: 100
+  seed: 42
+  results_path: './reports/evaluation.csv'

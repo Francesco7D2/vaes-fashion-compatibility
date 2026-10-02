@@ -1,0 +1,26 @@
+\begin{tabular}{lll}
+\toprule
+Score & All questions & Novel pairs \\
+\midrule
+\multicolumn{3}{l}{\emph{Reconstruction loss, ReLU head}} \\
+\quad distance & 39.2 (35.7--42.9) & 30.5 (26.7--34.2) \\
+\quad distance (same configuration) & 38.9 (35.6--42.4) & 29.4 (25.6--33.4) \\
+\quad cosine distance & 39.1 (35.7--42.8) & 29.7 (25.9--33.5) \\
+\quad reconstruction error & 27.8 (25.6--29.9) & 27.8 (24.6--31.1) \\
+\multicolumn{3}{l}{\emph{Complete VAE (final model)}} \\
+\quad distance & 44.1 (40.6--47.7) & 32.6 (28.9--36.3) \\
+\quad distance (same configuration) & 43.9 (40.5--47.6) & 32.2 (28.5--36.0) \\
+\quad cosine distance & 45.5 (41.9--49.1) & 32.8 (29.2--36.6) \\
+\quad reconstruction error & 28.0 (25.8--30.2) & 25.7 (22.6--29.0) \\
+\multicolumn{3}{l}{\emph{Reconstruction loss, ReLU head, foreground weight 5}} \\
+\quad distance & 44.1 (40.6--47.7) & 30.6 (27.0--34.4) \\
+\quad distance (same configuration) & 43.4 (40.0--47.0) & 29.3 (25.3--33.0) \\
+\quad cosine distance & 45.0 (41.4--48.8) & 31.4 (27.6--35.4) \\
+\quad reconstruction error & 27.9 (25.6--30.1) & 26.1 (23.0--29.3) \\
+\multicolumn{3}{l}{\emph{Baselines}} \\
+\quad co-occurrence & 57.3 (54.6--60.2) & 17.7 (16.7--18.5) \\
+\quad colour coherence & 33.4 (31.5--35.1) & 32.2 (29.4--35.0) \\
+\quad lightest option & 24.2 (22.0--26.4) & 25.9 (22.4--29.0) \\
+\quad random & 24.2 (22.1--26.3) & 22.8 (19.7--26.1) \\
+\bottomrule
+\end{tabular}

@@ -12,7 +12,7 @@ from src.generation.candidates import (
 )
 from src.generation.embeddings import ProductImages, encode_outfits
 from src.generation.retrieval import nearest_training_outfit, rank_for_product
-from src.models.vae256 import Conv_VAE, load_trained_model
+from src.models.vae256 import Conv_VAE, load_trained_model, save_model
 
 
 def wide(rows):
@@ -141,7 +141,7 @@ def test_encoding_shapes_determinism_and_weight_loading(tmp_path, training_outfi
     assert np.abs(raw - embeddings).max() < 1  # JPEG round trip is a small perturbation
     assert encode_outfits(model, outfit.iloc[:0], images, progress=False).shape == (0, 256)
     weights = tmp_path / "model.pt"
-    torch.save(model.state_dict(), weights)
+    save_model(model, weights)
     restored = load_trained_model(weights, "cpu")
     assert not restored.training
     np.testing.assert_allclose(

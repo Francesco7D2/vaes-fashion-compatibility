@@ -19,7 +19,7 @@ def load_config(config_path=None, overrides=None):
         config = yaml.safe_load(stream)
     for section, values in (overrides or {}).items():
         config.setdefault(section, {}).update(values)
-    for section in ("data", "training", "generation"):
+    for section in ("data", "training", "generation", "evaluation"):
         for key, value in config.get(section, {}).items():
             if key.endswith("_path"):
                 config[section][key] = str((path.parent / value).resolve())
