@@ -1,10 +1,15 @@
-
-
 data/
+/models/
+/figures/
+reports/logs/
 
-vaes/
-
-reports/epoch_images_256/
+# LaTeX build files of the report
+reports/*.aux
+reports/*.fdb_latexmk
+reports/*.fls
+reports/*.log
+reports/*.out
+reports/*.synctex.gz
 
 __pycache__/
 *.py[cod]
@@ -12,6 +17,3 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ruff_cache/
-/models/
-/figures/
-reports/logs/

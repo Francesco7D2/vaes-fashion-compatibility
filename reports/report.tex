@@ -1,0 +1,350 @@
+\documentclass[10pt,a4paper,twocolumn]{article}
+
+\usepackage[a4paper,top=2.2cm,bottom=2cm,left=1.7cm,right=1.7cm,columnsep=0.7cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{amsmath,amssymb}
+\usepackage{tabularx}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{figures/}}
+\setlist{nosep,leftmargin=*}
+\titleformat{\section}{\normalfont\large\bfseries\scshape}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries}{\thesubsection}{0.8em}{}
+\titlespacing*{\section}{0pt}{1.2em}{0.6em}
+\titlespacing*{\subsection}{0pt}{0.9em}{0.4em}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Kaggle Project, Escola d'Enginyeria (EE), Universitat Aut\`onoma de Barcelona (UAB)}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0pt}
+
+\newcommand{\code}[1]{\texttt{\small #1}}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.1}
+\renewcommand{\floatpagefraction}{0.8}
+\setcounter{topnumber}{3}
+\setcounter{totalnumber}{5}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\dblfloatpagefraction}{0.8}
+\setcounter{dbltopnumber}{3}
+
+\begin{document}
+
+\noindent{\LARGE\bfseries MANGO fashion compatibility\par}
+\vspace{0.6em}
+\noindent{\large Francesco Tedesco\par}
+\vspace{1.2em}
+
+\noindent\textbf{Abstract} --- Recommendation systems can play a crucial role in the fashion sector by suggesting products to customers based on their potential interests. This project aims to recommend complete outfits in real time from a single input product. The core of the approach is a set of outfit embeddings learned by a convolutional autoencoder with a variational (stochastic) latent layer. Each outfit is represented as one image, random candidate outfits made of products never seen in training are embedded, and candidates are ranked by their distance to the training outfits. Trained on 3,164 MANGO outfits, the model reconstructs outfit structure and coarse colour, and 100,000 candidates are generated and ranked in under one minute, so a recommendation reduces to a table lookup. The best-ranked candidates often have coherent colour palettes, but the distance is strongly correlated with how much of the outfit image is covered by products, which limits its value as a compatibility score.
+
+\vspace{0.8em}
+\noindent\textbf{Keywords} --- Recommendation systems, Fashion, Outfit creation, Real-time predictions, Variational Autoencoder (VAE).
+
+\vspace{0.4em}
+\begin{center}\rule{0.35\columnwidth}{0.4pt}\end{center}
+
+\section{Introduction}
+
+In fashion, recommendation systems can also increase sales: once it is known which product a customer is interested in, recommending a whole outfit around that product raises the probability that the customer buys one or more additional products. Two datasets are available: the first lists the products of each outfit, and the second describes each product (category, family, type, colour, material, image). Given these data, the aim of this project is to provide a solution that is useful for both the company and the customer: recommending a complete outfit based on a single input product.
+
+\section{Methodology}
+
+This section describes the process followed to reach the solution. The provided data are not cleaned, so data exploration and preprocessing need attention to detail. The outfits are then modelled with a convolutional autoencoder whose latent layer follows the variational autoencoder (VAE) design, in order to learn a representation of complete outfits.
+
+\subsection{Data exploration and analysis}
+
+A product can appear in several outfits, and every product belongs to at least one outfit. The dataset contains 7,842 outfits and 9,222 products. Counting outfits by their number of products gives Table~\ref{tab:sizes}.
+
+\begin{table}[tb]
+\centering\footnotesize
+\setlength{\tabcolsep}{2.2pt}
+\begin{tabular}{l*{13}{r}}
+\toprule
+Size & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 & 11 & 12 & 13 & 15 \\
+Outfits & 30 & 142 & 758 & 3875 & 1737 & 674 & 309 & 174 & 95 & 26 & 13 & 8 & 1 \\
+\bottomrule
+\end{tabular}
+\caption{Number of outfits by outfit size.}
+\label{tab:sizes}
+\end{table}
+
+The table shows potential outliers, such as outfits with two products or with more than ten, but a deeper analysis is needed to confirm it. Since the aim of the project is to build outfits, the analysis continues with the features that describe the class of each product. Starting with the most general description, \code{des\_product\_category}, and fixing the size to five, the most frequent sets of categories are those of Table~\ref{tab:category}.
+
+\begin{table}[tb]
+\centering\small
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}Xr}
+\toprule
+Category set & Outfits \\
+\midrule
+Accessories: 3, Tops: 1, Bottoms: 1 & 1872 \\
+Accessories: 4, Dress: 1 & 819 \\
+Accessories: 2, Tops: 1, Outerwear: 1, Bottoms: 1 & 494 \\
+Accessories: 2, Bottoms: 1, Tops: 2 & 195 \\
+Accessories: 3, Bottoms: 1, Outerwear: 1 & 123 \\
+\bottomrule
+\end{tabularx}
+\caption{Top five category sets among outfits of size five. \emph{Accessories} stands for \emph{Accesories, Swim and Intimate} and \emph{Dress} for \emph{Dresses, jumpsuits and Complete set}.}
+\label{tab:category}
+\end{table}
+
+\noindent The following can be noticed:
+\begin{itemize}
+\item There are two base types of outfit: (1) tops + bottoms + accessories and (2) dress + accessories. In both cases an outerwear item can be added.
+\item Some configurations are invalid, such as two tops in the same outfit or an outfit without a top.
+\item Almost every valid outfit has more than one accessory. Since accessories include footwear, bags and jewellery, a finer description is needed.
+\end{itemize}
+
+Repeating the analysis with the subcategory \code{des\_product\_family} gives Table~\ref{tab:family}.
+
+\begin{table}[tb]
+\centering\small
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}Xr}
+\toprule
+Family set & Outfits \\
+\midrule
+Footwear: 1, Jewellery: 2, Dresses: 1, Bags: 1 & 417 \\
+Bags: 1, Footwear: 1, Jewellery: 1, Shirt: 1, Trousers: 1 & 164 \\
+Footwear: 1, Dresses: 1, Bags: 1, Jewellery: 1, Glasses: 1 & 161 \\
+Bags: 1, Jewellery: 1, Jeans: 1, T-shirt: 1, Footwear: 1 & 135 \\
+Jewellery: 1, Bags: 1, Trousers: 1, Sweater: 1, Footwear: 1 & 135 \\
+\bottomrule
+\end{tabularx}
+\caption{Top five family sets among outfits of size five.}
+\label{tab:family}
+\end{table}
+
+\begin{itemize}
+\item All valid outfits contain one footwear product, and they can contain accessories such as bags and glasses.
+\item For tops, bottoms, dresses and outerwear this description is too specific to help build outfits.
+\item Valid outfits can contain more than one product of the jewellery family, so the analysis is repeated with \code{des\_product\_type} (Table~\ref{tab:type}).
+\end{itemize}
+
+\begin{table}[tb]
+\centering\small
+\begin{tabularx}{\columnwidth}{>{\raggedright\arraybackslash}Xr}
+\toprule
+Type set & Outfits \\
+\midrule
+Sandals, Ring, Earrings, Dress, Handbag & 54 \\
+Sandals, Earrings, Ring, Dress, Crossbody bag & 35 \\
+Necklace, Handbag, Sandals, Earrings, Dress & 35 \\
+Sandals, Dress, Shoulder bag, Earrings, Sunglasses & 32 \\
+Sandals, Earrings, Dress, Crossbody bag, Sunglasses & 31 \\
+\bottomrule
+\end{tabularx}
+\caption{Top five type sets among outfits of size five (one product of each type).}
+\label{tab:type}
+\end{table}
+
+\begin{itemize}
+\item All valid outfits contain earrings; other jewels, such as rings and necklaces, also appear in valid outfits.
+\item For the remaining classes this description is too specific.
+\end{itemize}
+
+These observations define a rule for building outfits:
+\begin{enumerate}
+\item The base of an outfit is one of the following sets:
+  \begin{itemize}
+  \item Tops + Bottoms + Footwear + Earrings
+  \item Dress + Footwear + Earrings
+  \end{itemize}
+\item The outfit can add any of the following complements, each at most once: Outerwear, Bags, Glasses, Ring and Necklace.
+\end{enumerate}
+
+A valid outfit is therefore a base plus any subset of the five complements, which gives $2 \times 2^5 = 64$ configurations. An outfit has at most nine products of different classes (eight for dress-based outfits), placed in ten class slots. The observations above hold across all outfit sizes (see the exploratory notebook); outfits of size two, or of size ten or more, never satisfy the rule.
+
+\subsection{Data processing}
+
+Based on the rule above and on the three product descriptions, a custom product class, \code{des\_product\_class}, is derived: the family for accessories other than jewellery, the type for jewellery, and the category otherwise. This column defines the ten slots of the outfit images.
+
+Applying the rule selects 3,164 of the 7,842 outfits; 45 of the 64 configurations occur, and the selected outfits have between three and eight products. The most frequent configuration, tops + bottoms + footwear + earrings + bag, covers 1,186 outfits. The frequency of each configuration is stored, because it is used later to create random outfits with unseen products for testing.
+
+The next step would be to split the outfits into training and test sets. Outfits are assigned to either set stratified by configuration, and, to prevent data leakage, test outfits sharing a product with any training outfit are dropped. Products are heavily shared: 1,849 of the 4,909 products in the selected outfits appear in more than one outfit, one of them in 373. Table~\ref{tab:split} shows the consequence: with 80\,\% of the outfits for training, essentially no test outfit remains, and even with 10\,\% only about 80 do. Therefore no split is made: the model is trained on all selected outfits and tested qualitatively on new outfits built from products that never appear in training.
+
+\begin{table}[tb]
+\centering\small
+\begin{tabular}{rrr}
+\toprule
+Training share & Test outfits & Without shared products \\
+\midrule
+80\,\% & 633 & 0.3 \\
+50\,\% & 1587 & 2.3 \\
+30\,\% & 2215 & 8.2 \\
+10\,\% & 2849 & 80.4 \\
+\bottomrule
+\end{tabular}
+\caption{Test outfits, and those sharing no product with the training outfits, averaged over ten random splits stratified by configuration.}
+\label{tab:split}
+\end{table}
+
+Once the training data are fixed, an auxiliary table is built with one row per outfit and one column per product class, holding the product code, or nothing when the outfit has no product of that class. Each product image is resized to $96 \times 128$ pixels (width $\times$ height) with bilinear interpolation, and the ten slots are concatenated horizontally in a fixed order (tops, bottoms, outerwear, dress, footwear, bags, glasses, earrings, ring, necklace), so every outfit becomes a $960 \times 128$ RGB image. Missing products are replaced by white images, so each class always occupies the same position. The strips are stored as JPEG images (quality 95) and decoded once at training time.
+
+Finally, four outfits are selected to follow the training visually: two top + bottom outfits with outerwear (one also with a ring and a necklace), one with a bag and a necklace but no outerwear, and one minimal dress outfit. They show whether the model learns to place the complements around the two bases.
+
+\subsection{Model and training process}
+
+The encoder applies two blocks of two $3 \times 3$ convolutions (4 and 8 filters) followed by $2 \times 2$ max pooling, which reduces the image to 8 channels of $32 \times 240$. The flattened 61,440 values pass through dense layers of 512, 256 and 512 units with ReLU activations, and the last 512 values are split into the mean $\mu$ and the log-variance $\log\sigma^2$ of a 256-dimensional latent vector. A latent vector is sampled with the reparameterization $z = \mu + \sigma \odot \varepsilon$, $\varepsilon \sim \mathcal{N}(0, I)$. The decoder maps $z$ back to 61,440 values, reshapes them to 8 channels of $32 \times 240$, and alternates twofold nearest-neighbour upsampling with $3 \times 3$ convolutions to produce the logits of the $3 \times 128 \times 960$ image. The model has 47.5 million parameters, most of them in the two dense layers that connect to the 61,440 flattened values.
+
+A VAE maximizes the evidence lower bound
+\[
+\mathrm{ELBO} = \mathbb{E}_{q(z \mid x)}\left[\log p(x \mid z)\right] - \mathrm{KL}\left(q(z \mid x) \,\|\, p(z)\right),
+\]
+where $q(z \mid x)$ is the variational distribution of the latent variables given an outfit and $p(z)$ is a standard normal prior. This model optimizes only the reconstruction term, as the mean binary cross-entropy between the image pixels and the decoder's logits; the KL term is not used. The model is therefore a stochastic autoencoder rather than a full VAE: the latent space is not pushed towards the prior, and random prior samples are not expected to decode into outfits. The ReLU after the last encoder layer also applies to the mean and log-variance, which keeps the log-variance non-negative.
+
+The model is implemented in PyTorch and trained on all 3,164 outfits for 400 epochs with Adam (learning rate $10^{-4}$), batches of 32 outfits and seed 42. On an Apple M5 Pro GPU training takes 89 minutes (about 13 seconds per epoch). The outfit embeddings are the posterior means $\mu$ of the trained model.
+
+\subsection{How to make the predictions}
+
+One way to build an outfit from the embeddings of the training outfits is:
+\begin{enumerate}
+\item Fix an input product.
+\item Try all combinations of products that form a valid outfit with it, and measure their distance to the latent space of the trained model.
+\item Select the combination with the smallest distance.
+\end{enumerate}
+
+This approach is not feasible for the products that never appear in a training outfit (Table~\ref{tab:unseen}). Even for the simplest configuration, dress + footwear + earrings, there are $605 \times 139 \times 95 = 7{,}989{,}025$ combinations, and each one has to be assembled into an image, encoded and stored. Since outfits of different sizes are wanted and the customer expects an almost instant answer, the following alternative is used:
+
+\begin{table}[tb]
+\centering\small
+\begin{tabular}{lr}
+\toprule
+Class & Unseen products \\
+\midrule
+Tops & 1242 \\
+Bottoms & 662 \\
+Dresses, jumpsuits and Complete set & 605 \\
+Outerwear & 360 \\
+Bags & 151 \\
+Footwear & 139 \\
+Earrings & 95 \\
+Glasses & 58 \\
+Necklace & 54 \\
+Ring & 12 \\
+\bottomrule
+\end{tabular}
+\caption{Products with an image that appear in no selected outfit, by class.}
+\label{tab:unseen}
+\end{table}
+
+\begin{enumerate}
+\item Set the number of outfits to create from the available products; here, 100,000 random outfits.
+\item Draw each outfit's configuration with the frequencies stored when selecting the valid outfits, then draw one unseen product for each class of the configuration. Some valid configurations are never generated, but the candidates follow the distribution of the training outfits and are therefore, hopefully, close to the learned latent space.
+\item Encode every candidate, building its image exactly as the training images (including the JPEG round trip). This is the most time-consuming step.
+\item Compute the Euclidean distance from every candidate embedding to every training embedding.
+\item Keep the minimum distance and the nearest training outfit.
+\item Store a table with the product codes of each candidate, its distance and its nearest training outfit.
+\item Given an input product, return the top 3 (or top $k$) candidates that contain it. This is almost instantaneous: it only filters the table, sorts it and selects the first rows.
+\end{enumerate}
+
+With this approach the company can serve outfit recommendations in real time, and add filters such as configuration, colour, material or product class. On the M5 Pro GPU, the whole procedure for 100,000 candidates takes 54 seconds.
+
+\section{Results and analysis}
+
+\subsection{Training}
+
+The loss falls from 0.643 in the first epoch to 0.196 after ten epochs and then decreases slowly (Fig.~\ref{fig:loss}). It reaches its minimum, 0.1591, at epoch 368 and ends at 0.1618; the improvement between epochs 100 and 400 is only 2.9\,\%. Short spikes, such as the one at epoch 147, recover within a few epochs.
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=\columnwidth]{loss.png}
+\caption{Training loss per epoch (logarithmic scale).}
+\label{fig:loss}
+\end{figure}
+
+Fig.~\ref{fig:reconstructions} compares the four sample outfits with their reconstructions from the posterior mean:
+\begin{itemize}
+\item The model fills missing products with white images in all cases: the occupied slots are always correct.
+\item Silhouettes and dark colours are reconstructed well, for instance the black shirt, the boots, the blue jeans and the dark jacket.
+\item Light garments, such as the white shirt and the cream trousers, fade into the background, and patterns and textures are lost: the printed dress becomes a brown shape.
+\item Small accessories keep their position and outline (earrings, necklace), but not their details.
+\end{itemize}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{reconstructions.png}
+\caption{The four sample outfits (training outfit table rows 45, 28, 896 and 912) and their reconstructions after 400 epochs.}
+\label{fig:reconstructions}
+\end{figure*}
+
+\subsection{Latent space}
+
+The first two principal components of the 3,164 embeddings (Fig.~\ref{fig:pca}) show four groups. The first component separates dress outfits from top + bottom outfits; within each base, the second component follows which accessory slots are filled: rings appear in 27\,\% of the top + bottom outfits of the lower group and in 1\,\% of the upper one, and glasses in 36\,\% and 2\,\% of the two dress groups. The latent space is therefore organized first by outfit configuration. Of the 256 latent dimensions, 171 are non-zero for at least one outfit; the final ReLU sets the others to zero.
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=\columnwidth]{latent_pca.png}
+\caption{Training embeddings projected on their first two principal components, coloured by outfit base.}
+\label{fig:pca}
+\end{figure}
+
+\subsection{Distances of the generated outfits}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{distances.png}
+\caption{Distances of the 100,000 candidates to their nearest training outfit: (a) distribution; (b) by number of products (boxes: quartiles; whiskers: 1.5 interquartile ranges; 592, 10,483, 65,957, 19,461, 3,407 and 100 candidates from three to eight products); (c) against the non-white share of the candidate's image, for 4,000 random candidates.}
+\label{fig:distances}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[scale=0.9]{recommendations.png}
+\caption{(a)--(d) Top 1 candidate for four random input products, framed in red; (e) worst candidate for the input product of (a). $d$ is the distance to the nearest training outfit.}
+\label{fig:recommendations}
+\end{figure*}
+
+Following the process described above gives the distribution of minimum distances in Fig.~\ref{fig:distances}a. It is unimodal and nearly symmetric (skewness 0.21), with mean 107.4 and standard deviation 23.8; the 5th, 50th and 95th percentiles are 70.2, 106.3 and 148.2. For comparison, a training outfit lies at a median distance of 79.5 from its nearest other training outfit, so most candidates fall outside the region occupied by the training outfits. The candidates are close to 2,598 different training outfits.
+
+The distance depends on the size of the candidate (Fig.~\ref{fig:distances}b): its mean grows from 94.4 for three products to 130.1 for eight, and dress outfits (101.3) are closer than top + bottom outfits (109.8). The size explains only part of this effect. The distance is correlated with the share of the image covered by products ($r = 0.62$ over 4,000 candidates, and between 0.45 and 0.63 within each size; Fig.~\ref{fig:distances}c). A linear model with the size alone explains 9\,\% of the variance of the distance, and 39\,\% with the size and the covered share. Because the model is trained to reconstruct pixels, candidates with fewer, smaller or lighter products are closer to the training outfits, whatever their compatibility.
+
+\subsection{Recommendations}
+
+The analysis of recommendations starts with the best candidate (top 1) for random input products, since the top 3 candidates of a product tend to be similar; the worst candidate is shown afterwards. Fig.~\ref{fig:recommendations}a--d shows four examples, with the input product framed in red:
+\begin{itemize}
+\item (a) Black trousers: a black sweater, a black crossbody bag and red sandals; the bag and the sandals share a croc texture, so the match goes beyond colour.
+\item (b) A grey striped jumpsuit: grey flats and rose-gold earrings, a minimal outfit with a consistent neutral palette.
+\item (c) A light grey cardigan: a cream tweed skirt and jacket, black ankle boots and black-and-white earrings, a light palette with black accents.
+\item (d) An ecru checked cardigan: beige trousers, nude sandals, a raffia tote and cream jewellery, a coherent summer outfit.
+\end{itemize}
+
+
+The worst candidate for the black trousers of example (a) is shown in Fig.~\ref{fig:recommendations}e. It is a plausible all-black outfit (cardigan, tweed jacket, ankle boots) with beige raffia earrings. Its large distance (167.2) is consistent with the coverage effect: it has five products including outerwear, and large dark areas. A low ranking therefore does not always mean a poor outfit.
+
+Fig.~\ref{fig:top3} shows the top 3 candidates for a random white skirt. All three keep a light white, cream and grey palette with gold jewellery; the first combines a padded vest with strappy sandals, a seasonal mismatch that the pixel representation cannot detect.
+
+\begin{figure}[tb]
+\centering
+\includegraphics[width=\columnwidth]{top3.png}
+\caption{Top 3 candidates for a random white skirt (framed in red).}
+\label{fig:top3}
+\end{figure}
+
+\section{Conclusions}
+
+This project delivers a working solution for both the company and the customer: outfits are created offline, and a recommendation for a single input product is a lookup that can be served in real time. The learned embeddings capture the configuration of an outfit and its coarse colours and silhouettes, and the best-ranked candidates often have coherent palettes and even matching materials. The main limitation is the score itself: the distance to the training outfits depends strongly on how much of the outfit image is covered by products, so it favours small and light outfits and can rank plausible outfits last. Together with the limited reconstruction quality and the absence of a quantitative evaluation, this means that the recommendations are promising but not yet validated.
+
+\section{Next steps}
+
+\begin{enumerate}
+\item \textbf{Quantitative evaluation.} Define a protocol that does not depend on visual inspection, for example a fill-in-the-blank task on outfits with unseen products or human ratings of ranked candidates, and compare against simple baselines (random candidates, colour and category rules, nearest neighbours on pretrained image features).
+\item \textbf{A score independent of coverage.} Compare each candidate only with training outfits of the same configuration, normalize the distance by the covered share or the outfit size, or rank candidates within each configuration.
+\item \textbf{A complete VAE.} Add the KL term with a tunable weight, use a linear layer for the mean and the log-variance instead of the final ReLU, and track reconstruction and KL separately.
+\item \textbf{A better image objective.} Weight the products' pixels against the white background, use a perceptual loss, or replace raw pixels with per-product features from a pretrained image encoder.
+\item \textbf{Training.} Shuffle the outfits every epoch, keep the checkpoint with the lowest loss (epoch 368 here, not 400) and use a learning-rate schedule.
+\item \textbf{Candidate generation.} Generate candidates around the input product instead of uniformly: a dress currently appears in a median of 45 candidates and an earring in 1,049.
+\item \textbf{Serving.} Expose the ranked table through an API with filters for configuration, colour and material.
+\end{enumerate}
+
+\end{document}
