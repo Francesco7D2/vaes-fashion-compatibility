@@ -33,7 +33,7 @@ def build_valid_outfits_df(config_path=None):
         data["configurations_base"], data["optional_products"]
     )
     selected, _ = select_valid_outfits(
-        merged, "des_product_class", "cod_outfit", "outfit", configurations
+        merged, "des_product_class", "cod_outfit", configurations
     )
     data_root = Path(data["outfits_path"]).parent.parent
 

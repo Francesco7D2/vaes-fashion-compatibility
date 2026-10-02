@@ -9,9 +9,11 @@ def _conv(in_channels, out_channels):
 
 
 class Conv_VAE(nn.Module):
-    """Original 256-dimensional stochastic convolutional autoencoder.
+    """Stochastic convolutional autoencoder with a 256-dimensional latent space.
 
-    Architecture is preserved; the training objective currently omits KL loss.
+    The encoder outputs a mean and a log-variance per latent dimension; the
+    decoder maps a latent vector to image logits. Training uses the
+    reconstruction loss only (no KL term), so this is not a full VAE.
     Tensors are N x C x H x W: inputs are 3 x 128 x 960 in [0, 1] (see
     `src.utils.torch_utilities.to_model_input`). Weights are Glorot-uniform,
     biases zero.

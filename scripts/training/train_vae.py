@@ -1,4 +1,4 @@
-"""Train the original reconstruction objective using the shared model."""
+"""Train the outfit autoencoder; export weights, embeddings and previews."""
 
 import math
 import pickle
@@ -36,7 +36,7 @@ def train_outfit_embeddings(config_path=None, overrides=None):
         if not isinstance(value, int) or value < 1:
             raise ValueError(f"{key} must be a positive integer")
     if (data["image_height"], data["image_width"]) != (128, 96):
-        raise ValueError("The original model requires 128 x 96 product images")
+        raise ValueError("The model requires 128 x 96 product images")
     torch.manual_seed(training.get("seed", 42))
     device = resolve_device(training.get("device", "auto"))
     strips = load_strips(training["train_dataset_path"])
@@ -85,7 +85,6 @@ def train_outfit_embeddings(config_path=None, overrides=None):
                     {
                         "latent_space": encode_dataset(model, dataset, batch_size),
                         "reconstruction_loss": history,
-                        "embedding_type": "posterior_mean",
                     },
                     stream,
                 )

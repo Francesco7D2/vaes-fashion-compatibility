@@ -1,3 +1,4 @@
+import pickle
 from pathlib import Path
 
 import numpy as np
@@ -55,13 +56,13 @@ def test_selection_handles_missing_sizes_nine_items_and_duplicates():
         columns=["cod_outfit", "cod_modelo_color", "des_product_class", "des_filename"],
     )
     selected, counts = select_valid_outfits(
-        frame, "des_product_class", "cod_outfit", "outfit", configurations
+        frame, "des_product_class", "cod_outfit", configurations
     )
     assert selected.cod_outfit.unique().tolist() == ["valid"]
     assert len(selected) == 9
     assert sum(counts.values()) == 1
     empty, counts = select_valid_outfits(
-        frame.iloc[:0], "des_product_class", "cod_outfit", "outfit", configurations
+        frame.iloc[:0], "des_product_class", "cod_outfit", configurations
     )
     assert empty.empty and counts == {}
 
@@ -126,7 +127,7 @@ def test_csv_to_records_pipeline(tmp_path):
     assert selected.cod_modelo_color.tolist() == ["001", "002", "003"]
     wide = build_outfit_w_products(config_path)
     assert list(wide.columns) == ["cod_outfit", *PRODUCT_CLASSES]
-    build_image_arrays(config_path=config_path)
+    build_image_arrays(config_path)
     paths = load_config(config_path)["training"]
     records = load_strips(paths["train_dataset_path"])
     previews = load_strips(paths["train_sample_path"])
@@ -135,8 +136,6 @@ def test_csv_to_records_pipeline(tmp_path):
     image = records[0] / 255
     assert image[:, :96].mean() > 0.98  # Missing Tops slot stays white.
     assert image[:, 3 * 96 : 4 * 96].mean() < 0.02  # Dress stays black.
-    with pytest.raises(ValueError, match="Channel-stacked"):
-        build_image_arrays(compact=True, config_path=config_path)
 
     config["training"].update(epochs=1, batch_size=2)
     config_path.write_text(yaml.safe_dump(config))
@@ -144,12 +143,9 @@ def test_csv_to_records_pipeline(tmp_path):
     assert len(history) == 1 and np.isfinite(history[0])
     assert Path(paths["model_weights_path"]).is_file()
     assert (Path(paths["epoch_images_path"]) / "image_at_epoch_0001.png").is_file()
-    import pickle
-
     with open(paths["model_data_path"], "rb") as stream:
         exported = pickle.load(stream)
     assert exported["latent_space"].shape == (1, 256)
-    assert exported["embedding_type"] == "posterior_mean"
     device = next(model.parameters()).device
     assert model.decode(torch.zeros(1, model.latent_dim, device=device)).shape == (1, 3, 128, 960)
 

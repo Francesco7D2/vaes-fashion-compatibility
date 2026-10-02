@@ -68,12 +68,6 @@ def encode_outfits(
 
 
 def load_training_embeddings(path):
-    """Read the training export (trusted pickle written by train_vae)."""
+    """Read the training export (a trusted pickle written by train_vae)."""
     with open(path, "rb") as stream:
-        exported = pickle.load(stream)
-    if exported.get("embedding_type") != "posterior_mean":
-        raise ValueError(
-            "Legacy embedding export (sampled z); rebuild it by retraining with "
-            "scripts.training.train_vae"
-        )
-    return exported
+        return pickle.load(stream)

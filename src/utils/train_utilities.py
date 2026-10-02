@@ -1,4 +1,4 @@
-"""Reconstruction-only training; the original experiment has no KL term."""
+"""Loss, optimizer, training step and reconstruction previews."""
 
 from pathlib import Path
 
@@ -10,7 +10,7 @@ from src.utils.torch_utilities import to_images, to_model_input
 
 
 def compute_loss(model, x):
-    """Mean pixel binary cross entropy (not a negative ELBO)."""
+    """Mean pixel binary cross entropy between reconstruction logits and `x`."""
     return F.binary_cross_entropy_with_logits(model(x), x)
 
 

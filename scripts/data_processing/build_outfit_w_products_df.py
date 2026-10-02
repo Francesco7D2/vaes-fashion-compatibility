@@ -9,7 +9,7 @@ from src.utils.setup_utilities import ensure_parent, load_config
 def build_outfit_w_products(config_path=None):
     data = load_config(config_path)["data"]
     frame = pd.read_csv(data["valid_outfits_path"], dtype={"cod_modelo_color": str})
-    # Reject duplicate classes within an outfit instead of overwriting products.
+    # pivot raises if an outfit has two products of the same class.
     outfits = frame.pivot(
         index="cod_outfit", columns="des_product_class", values="cod_modelo_color"
     )

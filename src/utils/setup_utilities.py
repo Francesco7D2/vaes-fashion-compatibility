@@ -1,6 +1,5 @@
 """Configuration and output-directory helpers."""
 
-import logging
 from pathlib import Path
 
 import yaml
@@ -30,11 +29,3 @@ def load_config(config_path=None, overrides=None):
 def ensure_parent(path):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def setup_logging(log_file="reports/logs/main.log", log_level=logging.INFO):
-    logging.basicConfig(
-        filename=ensure_parent(log_file),
-        level=log_level,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-    )

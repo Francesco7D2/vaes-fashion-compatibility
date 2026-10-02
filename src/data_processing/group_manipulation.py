@@ -1,4 +1,5 @@
 from collections import Counter
+from itertools import combinations
 
 import pandas as pd
 
@@ -111,19 +112,9 @@ def get_unique_sets_features(list_set, feature_name):
     return unique_sets_features_df
 
 
-def create_combinations(list_elements, root=True):
-    """Nonempty subsets; root=True requires the first element (legacy API)."""
-    from itertools import combinations
-
-    elements = list(list_elements)
-    if not elements:
-        return []
-    if root:
-        return [
-            [elements[0], *subset]
-            for size in range(len(elements))
-            for subset in combinations(elements[1:], size)
-        ]
+def create_combinations(elements):
+    """All nonempty subsets of `elements`, smallest first."""
+    elements = list(elements)
     return [
         list(subset)
         for size in range(1, len(elements) + 1)
@@ -133,16 +124,14 @@ def create_combinations(list_elements, root=True):
 
 def create_configurations(configurations_base, optional_products):
     """Combine each base with every subset of optional product classes."""
-    optional = [[], *create_combinations(optional_products, root=False)]
+    optional = [[], *create_combinations(optional_products)]
     return [list(base) + extra for base in configurations_base for extra in optional]
 
 
-def select_valid_outfits(
-    df_outfit_products, feature_name, code_sets, name_set, all_configurations
-):
-    """Match class multisets without a size cutoff; count configuration indices.
+def select_valid_outfits(df_outfit_products, feature_name, code_sets, all_configurations):
+    """Keep outfits whose multiset of classes equals one of the configurations.
 
-    name_set is retained for compatibility with the exploratory notebook.
+    Returns the selected rows and the number of outfits per configuration index.
     """
     signatures = {}
     for index, configuration in enumerate(all_configurations):

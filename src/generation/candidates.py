@@ -30,8 +30,8 @@ def configuration_probabilities(outfits):
 def product_pools(catalog, outfits, pool="unseen"):
     """Map each class to the product IDs candidates may draw from.
 
-    `unseen` products never appear in a training outfit (the report's setting),
-    `seen` only those that do, `all` every catalog product.
+    `unseen` products never appear in a training outfit, `seen` only those
+    that do, `all` every catalog product.
     """
     if pool not in POOLS:
         raise ValueError(f"pool must be one of {POOLS}")

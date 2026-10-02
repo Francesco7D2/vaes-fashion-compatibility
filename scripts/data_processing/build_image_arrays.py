@@ -15,11 +15,7 @@ from src.data_processing.schema import PRODUCT_CLASSES
 from src.utils.setup_utilities import ensure_parent, load_config
 
 
-def build_image_arrays(compact=False, config_path=None):
-    if compact:
-        raise ValueError(
-            "Channel-stacked images are incompatible with JPEG and this model"
-        )
+def build_image_arrays(config_path=None):
     config = load_config(config_path)
     data, training = config["data"], config["training"]
     products = pd.read_csv(data["valid_outfits_path"], dtype={"cod_modelo_color": str})

@@ -50,7 +50,7 @@ def _outfit_table(config_path, overrides):
 def _image_arrays(config_path, overrides):
     from scripts.data_processing.build_image_arrays import build_image_arrays
 
-    build_image_arrays(config_path=config_path)
+    build_image_arrays(config_path)
 
 
 def _train(config_path, overrides):
