@@ -1,8 +1,8 @@
-# Understanding this project
+# Project overview
 
-## What you built
+## Approach
 
-The goal was to recommend a complete outfit given one product. You represented an entire outfit as one image and learned a compressed representation, rather than directly learning a compatibility score between each pair of products.
+The goal is to recommend a complete outfit given one product. Instead of learning a compatibility score between pairs of products, the project represents an entire outfit as one image and learns a compressed representation of it.
 
 ```text
 Outfit membership + product metadata + images
@@ -11,66 +11,50 @@ Outfit membership + product metadata + images
     -> concatenated 128 × 960 RGB image
     -> encoder -> 256-dimensional representation -> decoder
     -> reconstruction training and exported embeddings
+    -> random candidate outfits ranked by distance to the training embeddings
 ```
 
-The rules are narrower than all possible fashion outfits. Footwear and earrings are mandatory; dresses and top/bottom outfits are alternatives. This reflects your original dataset analysis, not a general definition of compatibility.
-
-There are ten available slots but at most nine occupied slots: the top/bottom base has four products plus five optional classes. A dress-based outfit has at most eight. Five independently optional products and two bases give 2 × 2^5 = 64 configurations. The historical count of 42 comes from omitting subsets without Outerwear except singletons.
+The selection rules cover a narrower set than all possible outfits. Footwear and earrings are mandatory; dresses and top/bottom outfits are the two alternative bases. Five optional classes (outerwear, bags, glasses, ring, necklace) can be added, each at most once, which gives 2 × 2^5 = 64 configurations. There are ten slots but at most nine occupied ones: the top/bottom base has four products plus five optional classes, and a dress-based outfit has at most eight.
 
 ## Code map
 
 | File | Responsibility |
 | --- | --- |
-| `notebooks/exploratory-data-analysis.ipynb` | Original category, size, and selection analysis |
-| `config.yml` | Paths, rules, image sizes, training settings |
-| `src/data_processing/product_processing.py` | Derive product class from category/family/type |
-| `src/data_processing/group_manipulation.py` | EDA helpers, subsets, outfit selection |
-| `src/data_processing/schema.py` | Canonical slot order |
-| `src/data_processing/image_processing.py` | Image loading and TFRecord serialization |
-| `scripts/data_processing/` | Three ordered preprocessing entry points |
-| `src/models/vae256.py` | Encoder, sampling, decoder |
-| `src/utils/train_utilities.py` | Shared loss, gradient update, previews |
+| `config.yml` | Paths, rules, image sizes, training and generation settings |
+| `src/data_processing/schema.py` | Slot order |
+| `src/data_processing/product_processing.py` | Product class from category, family and type; image paths |
+| `src/data_processing/group_manipulation.py` | Exploratory counts, configurations, outfit selection |
+| `src/data_processing/image_processing.py` | Image loading and resizing, outfit strips, JPEG strip archives |
+| `src/models/vae256.py` | Encoder, sampling, decoder (PyTorch) |
+| `src/utils/torch_utilities.py` | Device choice (CUDA, Apple GPU, CPU), image/tensor layout |
+| `src/utils/train_utilities.py` | Loss, optimizer, training step, previews |
+| `src/utils/visualization.py` | Plots for the notebooks and the report |
+| `src/generation/` | Candidate sampling, candidate encoding, nearest-training-embedding distance and ranking |
+| `scripts/data_processing/` | The three preprocessing steps |
 | `scripts/training/train_vae.py` | Batching, epochs, checkpoints, embeddings |
-| `tests/test_pipeline.py` | Synthetic regressions and actual-model smoke test |
-
-The notebook and report remain historical artifacts; saved outputs have not been regenerated. The notebook assumes it starts inside the notebooks directory when changing its working directory.
+| `scripts/generation/generate_outfits.py` | Offline candidate generation and ranking |
+| `scripts/pipeline.py` | Command-line pipeline over all steps |
+| `scripts/report/make_figures.py` | Figures of the report |
+| `notebooks/` | Exploratory analysis, training and generation walkthroughs |
+| `reports/report.tex` | Report source; `reports/report.pdf` is the compiled report |
+| `tests/` | Synthetic regressions, actual-model smoke test, GPU/CPU gradient parity |
 
 ## How the model works
 
-Each product image is 128 × 96 RGB. Concatenating ten slots produces 128 × 960 × 3. Fixed positions allow category-specific learning; absent categories use white images.
+Each product image is 128 × 96 RGB. Concatenating ten slots produces a 128 × 960 RGB strip, a 3 × 128 × 960 tensor for the model. Fixed positions allow class-specific learning; absent classes use white images.
 
-Two convolution/pooling blocks reduce the shape to 32 × 240 × 8. Flattening produces 61,440 values. The next dense layer maps those to 512, requiring over 31 million weights. The decoder maps 256 values back to 61,440, adding over 15 million weights. This explains much of the memory cost.
+Two convolution/pooling blocks reduce it to 8 channels of 32 × 240. Flattening produces 61,440 values. The next dense layer maps those to 512, requiring over 31 million weights. The decoder maps 256 values back to 61,440, adding over 15 million weights. These two layers hold most of the 47.5 million parameters and most of the memory cost.
 
-The final 512 encoder outputs split into `mean` and `logvar`, each length 256. Sampling is `z = mean + exp(0.5 * logvar) * noise`. Upsampling and convolution reconstruct image logits, which sigmoid converts into image intensities for previews.
+The final 512 encoder outputs split into `mean` and `logvar`, each of length 256. Sampling is `z = mean + exp(0.5 * logvar) * noise`. Upsampling and convolutions reconstruct image logits, which a sigmoid converts into image intensities for previews. Exported embeddings and previews use the posterior mean; training samples `z`.
 
-The loss rewards pixel reconstruction, not human judgments of compatibility. White backgrounds and empty slots can dominate a pixel-average loss, so low reconstruction error alone is weak evidence of useful recommendations.
+The loss rewards pixel reconstruction only; there is no KL term, so the model is a stochastic autoencoder rather than a full VAE. The final encoder ReLU applies to the means and log-variances, which keeps the log-variance non-negative. White backgrounds and empty slots make up most of each image, so a low reconstruction error alone is weak evidence of useful recommendations.
 
-## Report versus available code
+## Outfit generation
 
-| Report describes | Available implementation |
-| --- | --- |
-| 128- versus 256-dimensional comparison | Only the 256-dimensional model |
-| Maximizing ELBO | Reconstruction cross entropy; no KL/prior regularization |
-| 42 configurations, 2,303 selected outfits | Historical counts; corrected rules allow 64 configurations and require rerunning |
-| 100,000 generated candidates | Candidate generation absent |
-| Ranking by nearest training embedding | Retrieval/ranking code absent |
-| Qualitative recommendations | Report figures, without executable evaluation |
+Candidate outfits are generated offline: a configuration is drawn with the frequencies of the training outfits, then one product per class is drawn from the products that never appear in a training outfit. Each candidate is built and encoded exactly like a training outfit and scored by the Euclidean distance to its nearest training embedding. A recommendation for a product is the list of its lowest-distance candidates, a lookup in the ranked table.
 
-Your proposed retrieval method moves expensive work offline: generate candidates, encode them, find their distances to training embeddings, then serve highly ranked candidates containing the requested product. This is an experiment worth testing, but distance to a known outfit is a hypothesis for compatibility, not a validated score. The checked-in code cannot reproduce these recommendation examples.
+## Evaluation and limitations
 
-The report describes product overlap preventing a useful held-out split, then training on all selected outfits. Preview reconstruction therefore measures training examples. New-product generalization needs a separate evaluation design. A roughly bell-shaped distance histogram also does not establish the central limit theorem as its cause.
+Products are shared by many outfits, so a held-out split that avoids product overlap leaves almost no test outfits (see the exploratory notebook). The model is therefore trained on all selected outfits, and the training previews measure fit rather than generalization. Recommendations are evaluated qualitatively.
 
-## Refactoring choices
-
-Layer dimensions, activations, and the reconstruction-only objective remain unchanged. Adding KL loss, removing the final encoder ReLU, shrinking dense layers, or using pretrained product features are separate experiments. In particular, ReLU restricts log-variance to nonnegative values; this deserves investigation in a proper VAE redesign.
-
-Image scaling, subset generation, NaN handling, and batching fixes intentionally change behavior. Evaluate them with a fresh run. Exported embeddings and previews use posterior means for stable inference; training remains stochastic.
-
-## Next research steps
-
-1. Recover the original data and missing Colab/retrieval scripts. Rebuild records, inspect strips, and run the corrected baseline.
-2. Define evaluation for new combinations of known products versus entirely unseen products. Compare simple category/color or feature-neighbor baselines, controlling for outfit size and empty slots.
-3. Run a separate VAE experiment with a linear mean/log-variance head and explicitly scaled KL loss. Track reconstruction and KL independently.
-4. Restore candidate generation and retrieval, retaining product IDs alongside embeddings. Measure ranking quality and serving latency.
-
-Refactor base: commit `e598727`, dated 2024-03-09. Full-data training and report reproduction require external data and were not performed.
+The distance to the nearest training outfit is a hypothesis for compatibility, not a validated score. It grows with the number of products in a candidate and, more strongly, with the share of the image that products cover, so it favours small and light outfits. The report quantifies this effect and lists the next steps.

@@ -1,23 +1,21 @@
-"""Build full and preview TFRecords in one pass."""
+"""Build full and preview strip archives in one pass."""
+
+from functools import lru_cache
 
 import pandas as pd
-import tensorflow as tf
 from tqdm import tqdm
 
 from src.data_processing.image_processing import (
-    create_white_image,
+    build_outfit_strip,
+    encode_jpeg,
     load_and_preprocess_image,
-    serialize_image,
+    save_strips,
 )
 from src.data_processing.schema import PRODUCT_CLASSES
 from src.utils.setup_utilities import ensure_parent, load_config
 
 
-def build_image_arrays(compact=False, config_path=None):
-    if compact:
-        raise ValueError(
-            "Channel-stacked images are incompatible with JPEG and this model"
-        )
+def build_image_arrays(config_path=None):
     config = load_config(config_path)
     data, training = config["data"], config["training"]
     products = pd.read_csv(data["valid_outfits_path"], dtype={"cod_modelo_color": str})
@@ -28,29 +26,23 @@ def build_image_arrays(compact=False, config_path=None):
         "des_filename"
     ]
     width, height = data["image_width"], data["image_height"]
-    white = create_white_image(width, height)
-    samples = set(training["train_sample_indices"])
+    samples = list(dict.fromkeys(training["train_sample_indices"]))
     if any(index < 0 or index >= len(outfits) for index in samples):
         raise ValueError("train_sample_indices must refer to existing outfit rows")
-    with (
-        tf.io.TFRecordWriter(ensure_parent(training["train_dataset_path"])) as writer,
-        tf.io.TFRecordWriter(
-            ensure_parent(training["train_sample_path"])
-        ) as sample_writer,
-    ):
-        for index, (_, row) in enumerate(tqdm(outfits.iterrows(), total=len(outfits))):
-            images = []
-            for slot in PRODUCT_CLASSES:
-                product = row[slot]
-                images.append(
-                    white
-                    if pd.isna(product)
-                    else load_and_preprocess_image(paths.loc[product], width, height)
-                )
-            record = serialize_image(tf.concat(images, axis=2))
-            writer.write(record)
-            if index in samples:
-                sample_writer.write(record)
+
+    @lru_cache(maxsize=None)
+    def load_image(product):
+        return load_and_preprocess_image(paths.loc[product], width, height)
+
+    records = [
+        encode_jpeg(build_outfit_strip(row, load_image, width, height))
+        for _, row in tqdm(outfits.iterrows(), total=len(outfits))
+    ]
+    save_strips(ensure_parent(training["train_dataset_path"]), records)
+    # Previews follow the configured order, so titles can use the same list.
+    save_strips(
+        ensure_parent(training["train_sample_path"]), [records[i] for i in samples]
+    )
 
 
 if __name__ == "__main__":

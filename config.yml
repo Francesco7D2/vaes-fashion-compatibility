@@ -25,10 +25,11 @@ data:
   image_width: 96
 
 training:
-  train_dataset_path: './data/processed/train_dataset.tfrecord'
-  train_sample_path: './data/processed/train_sample.tfrecord'
+  device: 'auto'  # auto (cuda > mps > cpu) | cuda | mps | cpu
+  train_dataset_path: './data/processed/train_dataset.npz'
+  train_sample_path: './data/processed/train_sample.npz'
   epoch_images_path: './figures/epoch_images_256'
-  model_weights_path: './models/vae_256.weights.h5'
+  model_weights_path: './models/vae_256.pt'
   model_data_path: './models/vae_data_256.pkl'
   train_sample_indices:
     - 45
@@ -40,3 +41,14 @@ training:
   learning_rate: 0.0001
   seed: 42
   checkpoint_every: 20
+
+generation:
+  device: 'auto'
+  generated_outfits_path: './data/processed/generated_outfits.csv'
+  candidate_embeddings_path: './data/processed/candidate_embeddings.npy'
+  candidate_pool: 'unseen'  # unseen | seen | all products as candidate material
+  num_candidates: 100000
+  encode_batch_size: 32
+  match_training_jpeg: true  # round-trip candidates through JPEG like training records
+  top_k: 3
+  seed: 42
