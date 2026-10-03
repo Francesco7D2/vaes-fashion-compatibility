@@ -130,12 +130,14 @@ Every 20 epochs and at the end, training saves (the final export holds the lowes
 
 ## Report
 
-The report source is `reports/report.tex`. After training and generation, redraw its figures and compile it:
+The report source is `reports/report.tex`. After training, generation and evaluation, redraw its figures and compile it:
 
 ```bash
 python -m scripts.report.make_figures
 cd reports && latexmk -pdf report.tex
 ```
+
+`make_figures` also writes the evaluation table (`reports/figures/evaluation.tex`) and every number quoted in the text (`reports/figures/values.tex`, one `\setval{key}{value}` line each). The report prints a number with `\val{key}`, so a new run updates the text without copying numbers by hand; a key missing from the file appears in bold as `??key` and LaTeX warns about it. The descriptions of the example outfits and the interpretation of the results remain hand-written and need a review after each run.
 
 ## Next steps
 
