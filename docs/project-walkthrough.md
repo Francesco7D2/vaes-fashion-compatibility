@@ -37,7 +37,7 @@ The selection rules cover a narrower set than all possible outfits. Footwear and
 | `scripts/generation/recommend.py` | Candidates generated and ranked around one product |
 | `scripts/evaluation/evaluate_fitb.py` | Fill-in-the-blank evaluation of a model and the baselines |
 | `scripts/pipeline.py` | Command-line pipeline over all steps |
-| `scripts/report/make_figures.py` | Figures of the report |
+| `scripts/report/make_figures.py` | Figures, evaluation table and quoted numbers of the report |
 | `notebooks/` | Exploratory analysis, training and generation walkthroughs |
 | `reports/report.tex` | Report source; `reports/report.pdf` is the compiled report |
 | `tests/` | Synthetic regressions, actual-model smoke test, GPU/CPU gradient parity, evaluation |

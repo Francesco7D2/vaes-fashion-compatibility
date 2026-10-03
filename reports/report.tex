@@ -30,6 +30,16 @@
 \renewcommand{\headrulewidth}{0pt}
 
 \newcommand{\code}[1]{\texttt{\small #1}}
+
+% Numbers computed by scripts/report/make_figures.py. figures/values.tex holds
+% \setval{key}{value} lines; \val{key} prints a value, or a bold ??key and a
+% warning when the key is missing.
+\newcommand{\setval}[2]{\expandafter\def\csname val:#1\endcsname{#2}}
+\DeclareRobustCommand{\val}[1]{%
+  \ifcsname val:#1\endcsname\csname val:#1\endcsname
+  \else\PackageWarning{report}{Missing value `#1'}\textbf{??#1}\fi}
+\input{figures/values.tex}
+
 \renewcommand{\topfraction}{0.9}
 \renewcommand{\bottomfraction}{0.8}
 \renewcommand{\textfraction}{0.1}
@@ -47,7 +57,7 @@
 \noindent{\large Francesco Tedesco\par}
 \vspace{1.2em}
 
-\noindent\textbf{Abstract} --- Recommendation systems can play a crucial role in the fashion sector by suggesting products to customers based on their potential interests. This project aims to recommend complete outfits in real time from a single input product. Each outfit is represented as one image, a variational autoencoder (VAE) learns an embedding per outfit, and random candidate outfits made of products never seen in training are ranked by their distance to the training outfits. Trained on 3,164 MANGO outfits, the model reconstructs the structure, silhouettes and dark colours of outfits; 100,000 candidates are generated and ranked in under one minute, and candidates around a single product in about two seconds. In a fill-in-the-blank evaluation on held-out outfits, the distance identifies the true product in 44\,\% of the questions and in 33\,\% of those with novel product pairs, against 25\,\% by chance: a real but modest compatibility signal, matched by colour coherence on novel pairs and far below product co-occurrence when pairs repeat. The distance also depends strongly on the darkness of the products, and the embeddings separate the two catalogues of the data.
+\noindent\textbf{Abstract} --- Recommendation systems can play a crucial role in the fashion sector by suggesting products to customers based on their potential interests. This project aims to recommend complete outfits in real time from a single input product. Each outfit is represented as one image, a variational autoencoder (VAE) learns an embedding per outfit, and random candidate outfits made of products never seen in training are ranked by their distance to the training outfits. Trained on 3,164 MANGO outfits, the model reconstructs the structure, silhouettes and dark colours of outfits; \val{candidates} candidates are generated and ranked in under one minute, and candidates around a single product in about two seconds. In a fill-in-the-blank evaluation on held-out outfits, the distance identifies the true product in \val{fitb-vae-all-distance}\,\% of the questions and in \val{fitb-vae-novel-pairs-distance}\,\% of those with novel product pairs, against \val{fitb-chance}\,\% by chance: a real but modest compatibility signal, matched by colour coherence on novel pairs and far below product co-occurrence when pairs repeat. The distance also depends strongly on the darkness of the products, and the embeddings separate the two catalogues of the data.
 
 \vspace{0.8em}
 \noindent\textbf{Keywords} --- Recommendation systems, Fashion, Outfit creation, Real-time predictions, Variational Autoencoder (VAE).
@@ -197,7 +207,7 @@ Finally, four outfits are selected to follow the training visually: two top + bo
 
 \subsection{Model and training process}
 
-The encoder applies two blocks of two $3 \times 3$ convolutions (4 and 8 filters) followed by $2 \times 2$ max pooling, which reduces the image to 8 channels of $32 \times 240$. The flattened 61,440 values pass through dense layers of 512 and 256 units with ReLU activations and a linear layer of 512 units, whose outputs are split into the mean $\mu$ and the log-variance $\log\sigma^2$ of a 256-dimensional latent vector. A latent vector is sampled with the reparameterization $z = \mu + \sigma \odot \varepsilon$, $\varepsilon \sim \mathcal{N}(0, I)$. The decoder maps $z$ back to 61,440 values, reshapes them to 8 channels of $32 \times 240$, and alternates twofold nearest-neighbour upsampling with $3 \times 3$ convolutions to produce the logits of the $3 \times 128 \times 960$ image. The model has 47.5 million parameters, most of them in the two dense layers that connect to the 61,440 flattened values.
+The encoder applies two blocks of two $3 \times 3$ convolutions (4 and 8 filters) followed by $2 \times 2$ max pooling, which reduces the image to 8 channels of $32 \times 240$. The flattened 61,440 values pass through dense layers of 512 and 256 units with ReLU activations and a linear layer of 512 units, whose outputs are split into the mean $\mu$ and the log-variance $\log\sigma^2$ of a 256-dimensional latent vector. A latent vector is sampled with the reparameterization $z = \mu + \sigma \odot \varepsilon$, $\varepsilon \sim \mathcal{N}(0, I)$. The decoder maps $z$ back to 61,440 values, reshapes them to 8 channels of $32 \times 240$, and alternates twofold nearest-neighbour upsampling with $3 \times 3$ convolutions to produce the logits of the $3 \times 128 \times 960$ image. The model has \val{parameters} million parameters, most of them in the two dense layers that connect to the 61,440 flattened values.
 
 A VAE maximizes the evidence lower bound
 \[
@@ -205,7 +215,7 @@ A VAE maximizes the evidence lower bound
 \]
 where $q(z \mid x)$ is the variational distribution of the latent variables given an outfit and $p(z)$ is a standard normal prior. The model minimizes the negative ELBO divided by the number of pixels: the mean binary cross-entropy between the image pixels and the decoder's logits, plus the KL divergence divided by the $3 \times 128 \times 960$ pixels. The mean and log-variance come from a linear layer.
 
-The model is implemented in PyTorch and trained on all 3,164 outfits for 400 epochs with Adam (learning rate $10^{-4}$) and seed 42, in batches of 32 outfits drawn in a new random order every epoch; the weights of the epoch with the lowest loss are kept. On an Apple M5 Pro GPU training takes 90 minutes (about 13.5 seconds per epoch). The outfit embeddings are the posterior means $\mu$ of the trained model.
+The model is implemented in PyTorch and trained on all 3,164 outfits for \val{epochs} epochs with Adam (learning rate \val{learning-rate}) and seed \val{training-seed}, in batches of \val{batch-size} outfits drawn in a new random order every epoch; the weights of the epoch with the lowest loss are kept. On an Apple M5 Pro GPU training takes 90 minutes (about 13.5 seconds per epoch). The outfit embeddings are the posterior means $\mu$ of the trained model.
 
 Two variants are compared with this model in the evaluation: a stochastic autoencoder trained with the reconstruction term only and a ReLU after the last encoder layer (which keeps means and log-variances non-negative), and the same autoencoder with product pixels weighing five times more than the background in the loss.
 
@@ -243,7 +253,7 @@ Ring & 12 \\
 \end{table}
 
 \begin{enumerate}
-\item Set the number of outfits to create from the available products; here, 100,000 random outfits.
+\item Set the number of outfits to create from the available products; here, \val{candidates} random outfits.
 \item Draw a catalogue with the share of training outfits from each, then a configuration with the frequencies of that catalogue's training outfits, and one unseen product of the catalogue for each class of the configuration. Some valid configurations are never generated, but the candidates follow the distribution of the training outfits and are therefore, hopefully, close to the learned latent space.
 \item Encode every candidate, building its image exactly as the training images (including the JPEG round trip). This is the most time-consuming step.
 \item Compute the Euclidean distance from every candidate embedding to every training embedding.
@@ -252,14 +262,14 @@ Ring & 12 \\
 \item Given an input product, return the top 3 (or top $k$) candidates that contain it. This is almost instantaneous: it only filters the table, sorts it and selects the first rows.
 \end{enumerate}
 
-With this approach the company can serve outfit recommendations in real time, and add filters such as configuration, colour, material or product class. On the M5 Pro GPU, the whole procedure for 100,000 candidates takes 55 seconds.
+With this approach the company can serve outfit recommendations in real time, and add filters such as configuration, colour, material or product class. On the M5 Pro GPU, the whole procedure for \val{candidates} candidates takes 55 seconds.
 
-Random candidates contain some products much more often than others: a dress appears in a median of 45 candidates and an earring in 787. For a single input product, candidates can instead be generated on demand: 1,000 candidates containing the product, from its catalogue, are generated, encoded and ranked in about two seconds.
+Random candidates contain some products much more often than others: a dress appears in a median of \val{candidates-per-dresses} candidates and an earring in \val{candidates-per-earrings}. For a single input product, candidates can instead be generated on demand: 1,000 candidates containing the product, from its catalogue, are generated, encoded and ranked in about two seconds.
 
 \subsection{Evaluation}
 \label{sec:evaluation}
 
-The recommendations are also evaluated quantitatively, with a fill-in-the-blank task in which outfits, not products, are held out. 10\,\% of the outfits (314), stratified by configuration, are held out, and a model is trained on the other 2,850 for 100 epochs. For every occupied slot of a held-out outfit, the true product is compared with three decoys: products of the same class and catalogue that appear in training outfits, so that neither the catalogue nor familiarity with the product reveals the answer. A score answers a question correctly when the true product obtains the best value; random choice is right 25\,\% of the time.
+The recommendations are also evaluated quantitatively, with a fill-in-the-blank task in which outfits, not products, are held out. \val{fitb-held-out-share}\,\% of the outfits (\val{fitb-held-out}), stratified by configuration, are held out, and a model is trained on the other \val{fitb-training} for \val{fitb-epochs} epochs. For every occupied slot of a held-out outfit, the true product is compared with three decoys: products of the same class and catalogue that appear in training outfits, so that neither the catalogue nor familiarity with the product reveals the answer. A score answers a question correctly when the true product obtains the best value; random choice is right \val{fitb-chance}\,\% of the time.
 
 The model scores are the distance to the nearest training outfit, the distance to the nearest training outfit of the same configuration, and the reconstruction error. They are compared with four baselines: the lightest option (smallest non-white share of the image), colour coherence (the share of the outfit's products in its most common colour group), co-occurrence (the number of training outfits that contain the option together with each of the outfit's other products) and random choice. Held-out outfits often share several products with a training outfit, so the questions are also evaluated on a subset of \emph{novel pairs}: questions whose true product never appears in a training outfit with any of the outfit's other products. Memorized product pairs cannot answer these questions. Intervals are 95\,\% bootstrap intervals over held-out outfits.
 
@@ -279,11 +289,11 @@ The model scores are the distance to the nearest training outfit, the distance t
 \label{fig:training}
 \end{figure*}
 
-The loss, the negative ELBO per pixel, falls from 0.408 in the first epoch to 0.185 after ten epochs and then decreases slowly (Fig.~\ref{fig:training}a), with short spikes that recover within a few epochs. It is still decreasing at the last epoch, whose weights are kept (0.1574); the improvement between epochs 100 and 400 is only 2.5\,\%.
+The loss, the negative ELBO per pixel, falls from \val{loss-first} in the first epoch to \val{loss-epoch-10} after ten epochs and then decreases slowly (Fig.~\ref{fig:training}a), with short spikes that recover within a few epochs. It is still decreasing at the end: the lowest loss, \val{loss-best}, is reached at epoch \val{loss-best-epoch} of \val{epochs}, whose weights are kept; the improvement after epoch 100 is only \val{loss-gain-after-epoch-100}\,\%.
 
 Fig.~\ref{fig:reconstructions} compares the four sample outfits with their reconstructions from the posterior mean:
 \begin{itemize}
-\item The occupied slots are always reconstructed correctly: over the 31,640 slots of the training outfits, a slot is white exactly when it is empty.
+\item The model tells occupied slots from empty ones: of the \val{slots} slots of the training outfits, \val{slot-accuracy}\,\% are reconstructed white exactly when they are empty.
 \item Silhouettes and colours of dark or saturated products are reconstructed well, including some texture: the black shirt, the ankle boots, the patterned bag, the blazer, the blue jeans and the tweed jacket.
 \item Light garments, such as the white shirt, the cream trousers and the white top, fade into the background, and fine prints are blurred: the printed dress keeps its colours but not its pattern.
 \item Small accessories keep their position and outline (earrings, ring, necklace).
@@ -292,14 +302,14 @@ Fig.~\ref{fig:reconstructions} compares the four sample outfits with their recon
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{reconstructions.png}
-\caption{The four sample outfits (training outfit table rows 45, 28, 896 and 912) and their reconstructions by the final model.}
+\caption{The four sample outfits (training outfit table rows \val{sample-rows}) and their reconstructions by the final model.}
 \label{fig:reconstructions}
 \end{figure*}
 
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{distances.png}
-\caption{Distances of the 100,000 candidates to their nearest training outfit: (a) distribution; (b) by number of products (boxes: quartiles; whiskers: 1.5 interquartile ranges); (c) against the darkness contributed by product pixels (photo background excluded), for 4,000 random candidates.}
+\caption{Distances of the \val{candidates} candidates to their nearest training outfit: (a) distribution; (b) by number of products (boxes: quartiles; whiskers: 1.5 interquartile ranges); (c) against the darkness contributed by product pixels (photo background excluded), for \val{darkness-sample} random candidates.}
 \label{fig:distances}
 \end{figure*}
 
@@ -317,26 +327,26 @@ Fig.~\ref{fig:reconstructions} compares the four sample outfits with their recon
 
 \subsection{Latent space}
 
-The first two principal components of the 3,164 embeddings (Fig.~\ref{fig:training}b) show four well separated groups, one for each combination of outfit base and catalogue. In this projection a straight line separates dress outfits from top + bottom outfits with 99.5\,\% accuracy, and the two catalogues with 99.9\,\% (both 100\,\% in the full latent space). The catalogue difference reflects photo style and assortment rather than compatibility: the photos of the two periods differ in background tone and framing. All 256 latent dimensions are active (the variance of their posterior mean across outfits exceeds 0.01).
+The first two principal components of the 3,164 embeddings (Fig.~\ref{fig:training}b) show four well separated groups, one for each combination of outfit base and catalogue. In this projection a straight line separates dress outfits from top + bottom outfits with \val{separability-base-2d}\,\% accuracy, and the two catalogues with \val{separability-catalogue-2d}\,\% (\val{separability-base}\,\% and \val{separability-catalogue}\,\% in the full latent space). The catalogue difference reflects photo style and assortment rather than compatibility: the photos of the two periods differ in background tone and framing. \val{latent-active} of the \val{latent-dims} latent dimensions are active (the variance of their posterior mean across outfits exceeds 0.01).
 
 \subsection{Distances of the generated outfits}
 
-Following the process described above gives the distribution of minimum distances in Fig.~\ref{fig:distances}a. It is unimodal and symmetric (skewness $-0.07$), with mean 11.6 and standard deviation 2.1; the 5th, 50th and 95th percentiles are 8.0, 11.6 and 15.0. A training outfit lies at a median distance of 10.2 from its nearest other training outfit (90th percentile: 14.1); 74.9\,\% of the candidates are farther than that median, but 87.6\,\% lie within the 90th percentile. The candidates are closest to 2,468 different training outfits.
+Following the process described above gives the distribution of minimum distances in Fig.~\ref{fig:distances}a. It is unimodal and symmetric (skewness $\val{distance-skewness}$), with mean \val{distance-mean} and standard deviation \val{distance-sd}; the 5th, 50th and 95th percentiles are \val{distance-p5}, \val{distance-median} and \val{distance-p95}. A training outfit lies at a median distance of \val{spacing-median} from its nearest other training outfit (90th percentile: \val{spacing-p90}); \val{beyond-spacing-median}\,\% of the candidates are farther than that median, but \val{within-spacing-p90}\,\% lie within the 90th percentile. The candidates are closest to \val{nearest-training-outfits} different training outfits.
 
-The distance grows with the size of the candidate (Fig.~\ref{fig:distances}b): its mean goes from 9.4 for three products to 13.0 for eight, and dress outfits (11.4) are slightly closer than top + bottom outfits (11.7). It depends even more on how dark the products are. Separating product pixels from the photo background, the darkness that products contribute to the image correlates with the distance at $r = 0.69$, and between 0.64 and 0.79 within each size (Fig.~\ref{fig:distances}c). A linear model explains 8\,\% of the variance of the distance with the size alone, 30\,\% with the product area, 48\,\% with the product darkness and 3\,\% with the background darkness; 49\,\% with all four. Darker candidates have embeddings of larger norm, and the distance follows that norm closely ($r = 0.92$). Because the model reconstructs pixels, candidates with fewer, smaller or lighter products are closer to the training outfits, whatever their compatibility.
+The distance grows with the size of the candidate (Fig.~\ref{fig:distances}b): its mean goes from \val{distance-size-3} for three products to \val{distance-size-8} for eight, and dress outfits (\val{distance-dress}) are slightly closer than top + bottom outfits (\val{distance-tops-bottoms}). It depends even more on how dark the products are. Separating product pixels from the photo background, the darkness that products contribute to the image correlates with the distance at $r = \val{darkness-r}$, and between \val{darkness-r-within-min} and \val{darkness-r-within-max} within each size (Fig.~\ref{fig:distances}c). A linear model explains \val{r2-size}\,\% of the variance of the distance with the size alone, \val{r2-area}\,\% with the product area, \val{r2-darkness}\,\% with the product darkness and \val{r2-background}\,\% with the background darkness; \val{r2-all}\,\% with all four. Darker candidates have embeddings of larger norm, and the distance follows that norm closely ($r = \val{norm-r}$). Because the model reconstructs pixels, candidates with fewer, smaller or lighter products are closer to the training outfits, whatever their compatibility.
 
-The distance also reflects colour coherence, in part. Real outfits are more coherent than candidates (on average 62.0\,\% against 46.8\,\% of their products in the most common colour group). Among candidates of the same size, the closest tenth is the most coherent (54.9\,\%); coherence then falls to about 45\,\% and rises slightly in the farthest tenth (46.5\,\%), where dark monochrome outfits sit.
+The distance also reflects colour coherence, in part. Real outfits are more coherent than candidates (on average \val{coherence-outfits}\,\% against \val{coherence-candidates}\,\% of their products in the most common colour group). Among candidates of the same size, the closest tenth is the most coherent (\val{coherence-closest-tenth}\,\%); coherence then falls to \val{coherence-lowest-tenth}\,\% at its lowest and rises slightly in the farthest tenth (\val{coherence-farthest-tenth}\,\%), where dark monochrome outfits sit.
 
 \begin{table*}[t]
 \centering\footnotesize
 \input{figures/evaluation.tex}
-\caption{Fill-in-the-blank accuracy in \% with 95\,\% bootstrap intervals: 1,616 questions on 314 held-out outfits, 711 of them novel pairs. Each question has four options, so random choice is right 25\,\% of the time. The models are trained for 100 epochs on the other 2,850 outfits.}
+\caption{Fill-in-the-blank accuracy in \% with 95\,\% bootstrap intervals: \val{fitb-questions-all} questions on \val{fitb-held-out} held-out outfits, \val{fitb-questions-novel-pairs} of them novel pairs. Each question has four options, so random choice is right \val{fitb-chance}\,\% of the time. The models are trained for \val{fitb-epochs} epochs on the other \val{fitb-training} outfits.}
 \label{tab:evaluation}
 \end{table*}
 
 \subsection{Recommendations}
 
-The analysis of recommendations starts with the best candidate (top 1) for random input products; the top 3 candidates of a product share few products besides the input (0.10 on average). Fig.~\ref{fig:recommendations} (left, a--d) shows four examples, with the input product framed in red:
+The analysis of recommendations starts with the best candidate (top 1) for random input products; the top 3 candidates of a product share few products besides the input (\val{top3-shared-products} on average). Fig.~\ref{fig:recommendations} (left, a--d) shows four examples, with the input product framed in red:
 \begin{itemize}
 \item (a) A denim jacket: a pink T-shirt, white jeans, white trainers and small silver earrings, a classic casual outfit.
 \item (b) A cream knitted top: beige cargo trousers, gold sandals, a cream bag and earrings, a consistent neutral palette.
@@ -344,21 +354,21 @@ The analysis of recommendations starts with the best candidate (top 1) for rando
 \item (d) A black skirt: a sage blouse, beige trainers, a pearl clutch and white earrings; the colours work, but trainers and a pearl clutch are an unusual mix.
 \end{itemize}
 
-The worst candidate for the denim jacket of example (a) is shown in Fig.~\ref{fig:recommendations}e: a black-and-white printed jumpsuit with a plaid tote, black sandals and sunglasses. Its two clashing patterns make it a poor outfit, and its large distance (15.9) is also consistent with the darkness effect: it has six products and large dark areas.
+The worst candidate for the denim jacket of example (a) is shown in Fig.~\ref{fig:recommendations}e: a black-and-white printed jumpsuit with a plaid tote, black sandals and sunglasses. Its two clashing patterns make it a poor outfit, and its large distance (\val{worst-distance}) is also consistent with the darkness effect: it has \val{worst-size} products and large dark areas.
 
 Fig.~\ref{fig:recommendations} (right) shows the top 3 candidates for a random white skirt. All three are light summer outfits: a cream shirt or a white top, flat or low sandals, light bags and silver or beaded earrings; the first two share the same pink bag.
 
 \subsection{Quantitative evaluation}
 
-Table~\ref{tab:evaluation} lists the accuracy of every score. Co-occurrence is by far the strongest score on all questions (57.3\,\%): held-out outfits often repeat product pairs of training outfits. On novel pairs it falls below chance, as expected, because decoys that ever appeared with the outfit's products always win.
+Table~\ref{tab:evaluation} lists the accuracy of every score. Co-occurrence is by far the strongest score on all questions (\val{fitb-all-co-occurrence}\,\%): held-out outfits often repeat product pairs of training outfits. On novel pairs it falls below chance, as expected, because decoys that ever appeared with the outfit's products always win.
 
-The complete VAE is the best model. Its distance answers 44.1\,\% of all questions and 32.6\,\% of the novel pairs, against 39.2\,\% and 30.5\,\% for the reconstruction-only model. Weighting product pixels helps on all questions (44.1\,\%) but not on novel pairs (30.6\,\%), so it mostly improves the recognition of near-duplicates. The distance to training outfits of the same configuration and the cosine distance perform like the plain distance, since the four options of a question share their configuration and differ in one product. The reconstruction error and the lightest option are close to chance: within a question, the model does not simply prefer lighter outfits.
+The complete VAE is the best model. Its distance answers \val{fitb-vae-all-distance}\,\% of all questions and \val{fitb-vae-novel-pairs-distance}\,\% of the novel pairs, against \val{fitb-reconstruction-all-distance}\,\% and \val{fitb-reconstruction-novel-pairs-distance}\,\% for the reconstruction-only model. Weighting product pixels helps on all questions (\val{fitb-foreground-all-distance}\,\%) but not on novel pairs (\val{fitb-foreground-novel-pairs-distance}\,\%), so it mostly improves the recognition of near-duplicates. The distance to training outfits of the same configuration and the cosine distance perform like the plain distance, since the four options of a question share their configuration and differ in one product. The reconstruction error and the lightest option are close to chance: within a question, the model does not simply prefer lighter outfits.
 
-On novel pairs, the visual signal is modest: the best model is about 8 points above chance, and a simple colour-coherence rule (32.2\,\%) is as accurate. The image embeddings therefore capture compatibility beyond memorized pairs, but little more than colour.
+On novel pairs, the visual signal is modest: the best model answers \val{fitb-vae-novel-pairs-distance}\,\% against \val{fitb-chance}\,\% by chance, and a simple colour-coherence rule (\val{fitb-novel-pairs-colour-coherence}\,\%) is as accurate. The image embeddings therefore capture compatibility beyond memorized pairs, but little more than colour.
 
 \section{Conclusions}
 
-This project delivers a working solution for both the company and the customer: candidate outfits are created offline or around a single product within a few seconds, and recommending is a lookup that can be served in real time. The complete VAE reconstructs the structure, silhouettes and dark colours of outfits, and its embeddings are organized first by outfit base and by catalogue. In the fill-in-the-blank evaluation, its distance recognizes the true product in 44\,\% of the questions and in 33\,\% of those with novel product pairs, against 25\,\% for random choice. This is clear but modest evidence of compatibility: memorized co-occurrence is much stronger when product pairs repeat, colour coherence is as good on novel pairs, and the distance across candidates of different sizes still depends strongly on the darkness of their products. The recommendations are promising, but the score needs better visual features and should be combined with co-occurrence and colour before it is used.
+This project delivers a working solution for both the company and the customer: candidate outfits are created offline or around a single product within a few seconds, and recommending is a lookup that can be served in real time. The complete VAE reconstructs the structure, silhouettes and dark colours of outfits, and its embeddings are organized first by outfit base and by catalogue. In the fill-in-the-blank evaluation, its distance recognizes the true product in \val{fitb-vae-all-distance}\,\% of the questions and in \val{fitb-vae-novel-pairs-distance}\,\% of those with novel product pairs, against \val{fitb-chance}\,\% for random choice. This is clear but modest evidence of compatibility: memorized co-occurrence is much stronger when product pairs repeat, colour coherence is as good on novel pairs, and the distance across candidates of different sizes still depends strongly on the darkness of their products. The recommendations are promising, but the score needs better visual features and should be combined with co-occurrence and colour before it is used.
 
 \section{Next steps}
 
