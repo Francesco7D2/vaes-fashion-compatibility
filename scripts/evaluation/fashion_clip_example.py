@@ -2,11 +2,72 @@ from src.utils.setup_utilities import load_config
 from scripts.generation.generate_outfits import load_catalog
 from src.generation.candidates import catalogues
 from src.evaluation.fitb import split_outfits, fitb_questions, fitb_accuracy
+from src.evaluation.fitb import cooccurrence_scores, colour_scores 
 from src.data_processing.schema import PRODUCT_CLASSES
 from PIL import Image
 from transformers import CLIPModel, AutoProcessor
 import torch
 import torch.nn.functional as F
+import pandas as pd
+
+
+def score_question(question, embedding_by_id):
+    """Return one mean-cosine score per candidate, in question-row order."""
+
+    # candidates IDs from slot 0 (first row)
+    first_row = question.iloc[0]
+    missing_slot = first_row["slot"]
+    candidate_ids = question[missing_slot].tolist()
+
+
+    remaining_items = first_row[list(PRODUCT_CLASSES)]
+    remaining_ids = remaining_items.drop(missing_slot).dropna().tolist()
+
+    candidate_embeddings = torch.stack(
+        [embedding_by_id[product_id] for product_id in candidate_ids]
+    )
+    
+    remaining_embeddings = torch.stack(
+        [embedding_by_id[product_id] for product_id in remaining_ids]
+    )
+
+    similarities = candidate_embeddings @ remaining_embeddings.T
+
+    scores = similarities.mean(dim=1).cpu().numpy()
+
+    return scores
+
+
+def encode_products(product_ids, image_paths, processor, model, batch_size=32):
+    """Return a dictionary mapping product IDs to normalized embeddings."""
+
+    embedding_by_id = dict()    
+
+    for start in range(0, len(product_ids), batch_size):
+        
+        batch_ids = product_ids[start : start + batch_size]
+        batch_paths = image_paths.loc[batch_ids]
+
+        batch_images = []
+        
+        for path in batch_paths:
+            with Image.open(path) as image:
+                batch_images.append(image.convert("RGB"))
+
+
+        inputs = processor(images=batch_images, return_tensors="pt")
+
+        with torch.inference_mode():
+            embeddings = model.get_image_features(**inputs)
+
+
+        unit_embeddings = F.normalize(embeddings, p=2, dim=1)
+        embedding_by_id.update(zip(batch_ids, unit_embeddings.cpu()))
+
+    return embedding_by_id
+
+
+
 
 
 def main():
@@ -41,9 +102,129 @@ def main():
         seed = config["evaluation"]["seed"]
     )
 
-    question =  questions_df[questions_df["question"] == 0].copy()
+    all_scores = pd.Series(index=questions_df.index, dtype=float)
+
+    print("Questions:", questions_df["question"].nunique())
+    print("Option scores:", len(all_scores))
+    print("Missing scores:", all_scores.isna().sum())
+
+    products = pd.read_csv(
+        config["data"]["products_path"],
+        dtype={"cod_modelo_color": str},
+    )
+
+    colour = (
+        products.drop_duplicates("cod_modelo_color")
+        .set_index("cod_modelo_color")["des_agrup_color_eng"]
+    )
 
 
+    product_cells = questions_df[list(PRODUCT_CLASSES)]
+    product_values = product_cells.stack()
+    evaluation_product_ids = product_values.unique().tolist()
+
+    #print(product_values.head(10))
+    print("Distinct products:", len(evaluation_product_ids))
+
+
+    #question =  questions_df[questions_df["question"] == 0].copy()
+    # id == 0
+    # question: rows
+    
+    image_paths = catalog.set_index("cod_modelo_color")["des_filename"]
+
+
+    model_id = "patrickjohncyh/fashion-clip"
+
+    processor = AutoProcessor.from_pretrained(model_id, use_fast=False)
+    model = CLIPModel.from_pretrained(model_id)
+
+    model.eval()
+    model.requires_grad_(False)
+
+
+    embedding_by_id = encode_products(
+        product_ids=evaluation_product_ids,
+        image_paths=image_paths, 
+        processor=processor, 
+        model=model, 
+        batch_size=32
+    )
+
+    print("Number of embeddings:", len(embedding_by_id))
+
+
+    for question_id, question_rows in questions_df.groupby(
+                                                    "question", sort=False
+                                                ):
+        
+
+        scores = score_question(question_rows, embedding_by_id)
+
+        all_scores.loc[question_rows.index] = scores
+
+
+
+    accuracy, ci_low, ci_high = fitb_accuracy(
+        questions_df,
+        all_scores.to_numpy(),
+        higher_is_better=True,
+    )
+
+    print(f"FashionCLIP accuracy: {accuracy:.2%}")
+    print(f"95% confidence interval: [{ci_low:.2%}, {ci_high:.2%}]")
+
+
+    colour_values = colour_scores(questions_df, colour)
+
+    accuracy, ci_low, ci_high = fitb_accuracy(
+        questions_df,
+        colour_values,
+        higher_is_better=True,
+    )
+
+    print(f"FashionCLIP accuracy (colour scores): {accuracy:.2%}")
+    print(f"95% confidence interval (colour scores): [{ci_low:.2%}, {ci_high:.2%}]")
+
+
+
+
+    cooccurrence = cooccurrence_scores(
+        questions_df, outfits, rows_train
+    )
+
+
+    novel_question_ids = questions_df.loc[
+        questions_df["is_true"] & (cooccurrence == 0),
+        "question",
+    ]
+
+    novel_mask = questions_df["question"].isin(novel_question_ids)
+
+    print("Unseen-pair questions:", novel_question_ids.nunique())
+    print("Unseen-pair option rows:", novel_mask.sum())
+
+    novel_accuracy, novel_low, novel_high = fitb_accuracy(
+        questions_df.loc[novel_mask],
+        all_scores.loc[novel_mask].to_numpy(),
+        higher_is_better=True,
+    )
+
+    print(f"FashionCLIP unseen-pair accuracy: {novel_accuracy:.2%}")
+    print(f"95% confidence interval: [{novel_low:.2%}, {novel_high:.2%}]")
+
+
+    novel_accuracy, novel_low, novel_high = fitb_accuracy(
+        questions_df.loc[novel_mask],
+        colour_values[novel_mask.to_numpy()],
+        higher_is_better=True,
+    )
+
+    print(f"FashionCLIP unseen-pair accuracy (colour scores): {novel_accuracy:.2%}")
+    print(f"95% confidence interval (colour scores): [{novel_low:.2%}, {novel_high:.2%}]")
+
+
+    """
     # candidates IDs from slot 0 (first row)
     first_row = question.iloc[0]
     missing_slot = first_row["slot"]
@@ -55,9 +236,11 @@ def main():
     remaining_items = first_row[list(PRODUCT_CLASSES)]
     remaining_ids= remaining_items.drop(missing_slot).dropna().tolist()
     print("Remaining:",remaining_ids)
+    all_ids = candidate_ids + remaining_ids
+    """
 
-    image_paths = catalog.set_index("cod_modelo_color")["des_filename"]
 
+    """
     candidate_paths = image_paths.loc[candidate_ids].tolist()
     remaining_paths = image_paths.loc[remaining_ids].tolist()
 
@@ -110,8 +293,13 @@ def main():
 
     print("Embedding lengths:", unit_embeddings.norm(dim=1))
 
-    n_candidates = len(candidate_ids)
+    all_ids = candidate_ids + remaining_ids
 
+    embedding_by_id = dict(zip(all_ids, unit_embeddings))
+
+    scores = score_question(question, embedding_by_id)
+
+    n_candidates = len(candidate_ids)
     candidate_embeddings = unit_embeddings[:n_candidates]
     remaining_embeddings = unit_embeddings[n_candidates:]
 
@@ -141,6 +329,7 @@ def main():
         higher_is_better=True,
     )
     print("Question credit:", credit)
+    """
     
 if __name__ == "__main__":
     main()
