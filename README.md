@@ -59,3 +59,7 @@ The data is not included; see [docs/usage.md](docs/usage.md).
 
 Started after the UPC Datathon 2023. First version in TensorFlow (2024);
 rewritten in PyTorch with Claude Code (2026). Code under the MIT licence.
+
+## Data availability
+
+The MANGO dataset is not included. Redistribution permissions have not been verified, so I cannot currently provide a copy. Running the experiments requires access to the original data; see docs/usage.md for the expected files.

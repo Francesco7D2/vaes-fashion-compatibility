@@ -9,6 +9,9 @@ from transformers import CLIPModel, AutoProcessor
 import torch
 import torch.nn.functional as F
 import pandas as pd
+import numpy as np
+from pathlib import Path
+
 
 
 def score_question(question, embedding_by_id):
@@ -66,9 +69,21 @@ def encode_products(product_ids, image_paths, processor, model, batch_size=32):
 
     return embedding_by_id
 
+def question_credit(questions, scores):
+    """Return credit and outfit_row per question; higher scores are better."""
 
+    frame = questions[["question", "outfit_row", "is_true"]].assign(
+        score=np.asarray(scores, dtype=float)
+    )
+   
+    best = frame.groupby("question")["score"].transform("max")
 
+    winners = frame[np.isclose(frame["score"], best)]
 
+    return winners.groupby("question").agg(
+        credit=("is_true", "mean"),
+        outfit_row=("outfit_row", "first"),
+    )
 
 def main():
 
@@ -106,7 +121,6 @@ def main():
 
     print("Questions:", questions_df["question"].nunique())
     print("Option scores:", len(all_scores))
-    print("Missing scores:", all_scores.isna().sum())
 
     products = pd.read_csv(
         config["data"]["products_path"],
@@ -164,6 +178,8 @@ def main():
         all_scores.loc[question_rows.index] = scores
 
 
+    print("Missing scores:", all_scores.isna().sum())
+
 
     accuracy, ci_low, ci_high = fitb_accuracy(
         questions_df,
@@ -183,9 +199,55 @@ def main():
         higher_is_better=True,
     )
 
-    print(f"FashionCLIP accuracy (colour scores): {accuracy:.2%}")
-    print(f"95% confidence interval (colour scores): [{ci_low:.2%}, {ci_high:.2%}]")
+    print(f"Colour baseline accuracy: {accuracy:.2%}")
+    print(f"95% confidence interval: [{ci_low:.2%}, {ci_high:.2%}]")
 
+
+
+    clip_credit = question_credit(questions_df, all_scores)
+    colour_credit = question_credit(questions_df, colour_values)
+    
+    comparison = clip_credit.rename(columns={"credit": "clip_credit"})
+    comparison["colour_credit"] = colour_credit["credit"]
+    comparison["difference"] = (
+        comparison["clip_credit"] - comparison["colour_credit"]
+    )
+
+    print(comparison.head())
+    print(f"Mean advantage: {100 * comparison['difference'].mean():.2f} percentage points")
+
+    per_outfit = comparison.groupby("outfit_row")["difference"].agg(
+        ["sum", "count"]
+    )
+
+    print(per_outfit.head())
+    print("Questions represented:", per_outfit["count"].sum())
+
+    reconstructed = per_outfit["sum"].sum() / per_outfit["count"].sum()
+    print(f"Reconstructed advantage: {100 * reconstructed:.2f} percentage points")
+
+
+    sums = per_outfit["sum"].to_numpy()
+    counts = per_outfit["count"].to_numpy()
+    n_outfits = len(per_outfit)
+
+    rng = np.random.default_rng(42)
+    bootstrap_differences = []
+
+    for i in range(1000):
+        sampled = rng.integers(0, n_outfits, size=n_outfits)
+
+        difference = sums[sampled].sum() / counts[sampled].sum()
+
+        bootstrap_differences.append(difference)
+
+    low, high = np.percentile(bootstrap_differences, [2.5, 97.5])
+
+    print("Bootstrap repetitions:", len(bootstrap_differences))
+    print(
+        f"95% paired bootstrap interval: "
+        f"[{100 * low:.2f}, {100 * high:.2f}] percentage points"
+    )
 
 
 
@@ -220,9 +282,99 @@ def main():
         higher_is_better=True,
     )
 
-    print(f"FashionCLIP unseen-pair accuracy (colour scores): {novel_accuracy:.2%}")
+    print(f"Colour baseline unseen-pair accuracy: {novel_accuracy:.2%}")
     print(f"95% confidence interval (colour scores): [{novel_low:.2%}, {novel_high:.2%}]")
 
+    novel_comparison = comparison.loc[
+        comparison.index.isin(novel_question_ids)
+    ].copy()
+
+    novel_per_outfit = novel_comparison.groupby("outfit_row")["difference"].agg(
+        ["sum", "count"]
+    )
+
+    print("Unseen-pair questions:", len(novel_comparison))
+    print("Questions represented:", novel_per_outfit["count"].sum())
+
+    novel_advantage = (
+        novel_per_outfit["sum"].sum() / novel_per_outfit["count"].sum()
+    )
+    print(f"Unseen-pair advantage: {100 * novel_advantage:.2f} percentage points")
+
+    novel_sums = novel_per_outfit["sum"].to_numpy()
+    novel_counts = novel_per_outfit["count"].to_numpy()
+    n_novel_outfits = len(novel_per_outfit)
+
+    novel_rng = np.random.default_rng(42)
+    novel_bootstrap_differences = []
+
+    for i in range(1000):
+        sampled = novel_rng.integers(0, n_novel_outfits, size=n_novel_outfits)
+
+        difference = novel_sums[sampled].sum() / novel_counts[sampled].sum()
+
+        novel_bootstrap_differences.append(difference)
+
+    novel_diff_low, novel_diff_high = np.percentile(
+        novel_bootstrap_differences, [2.5, 97.5]
+    )
+
+    print("Unseen-pair bootstrap repetitions:", len(novel_bootstrap_differences))
+    print(
+        f"Unseen-pair 95% paired bootstrap interval: "
+        f"[{100 * novel_diff_low:.2f}, {100 * novel_diff_high:.2f}] "
+        f"percentage points"
+    )
+
+
+
+
+
+    summary_rows = [
+        {
+            "subset": "all",
+            "questions": len(comparison),
+            "outfits": comparison["outfit_row"].nunique(),
+            "fashion_clip_accuracy": comparison["clip_credit"].mean(),
+            "colour_accuracy": comparison["colour_credit"].mean(),
+            "difference": comparison["difference"].mean(),
+            "difference_ci_low": low,
+            "difference_ci_high": high,
+        },
+        {
+            "subset": "unseen_pairs",
+            "questions": len(novel_comparison),
+            "outfits": novel_comparison["outfit_row"].nunique(),
+            "fashion_clip_accuracy": novel_comparison["clip_credit"].mean(),
+            "colour_accuracy": novel_comparison["colour_credit"].mean(),
+            "difference": novel_comparison["difference"].mean(),
+            "difference_ci_low": novel_diff_low,
+            "difference_ci_high": novel_diff_high,
+        },
+    ]
+
+
+    
+    question_results = comparison.reset_index()
+
+
+    question_results["is_unseen_pair"] = question_results["question"].isin(
+        novel_question_ids
+    )
+
+    output_path = (
+        Path(config["evaluation"]["results_path"]).parent
+        / "fashion_clip_questions.csv"
+    )
+
+    question_results.to_csv(output_path, index = False)
+
+
+
+    summary = pd.DataFrame(summary_rows)
+    summary_path = output_path.with_name("fashion_clip_summary.csv")
+
+    summary.to_csv(summary_path, index=False)
 
     """
     # candidates IDs from slot 0 (first row)
