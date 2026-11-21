@@ -18,6 +18,7 @@ options (chance 25%).
 | --- | --- | --- |
 | Product co-occurrence | 57.3% | 17.7% |
 | VAE latent distance | 44.1% | 32.6% |
+| FashionCLIP, frozen (mean similarity) | 39.0% | 34.2% |
 | Colour coherence | 33.4% | 32.2% |
 | Random | 24.2% | 22.8% |
 
@@ -39,9 +40,10 @@ ranked by distance to the nearest training outfit. Details in
 
 ## Next step
 
-Replace whole-outfit pixels with per-product embeddings from a pretrained
-image encoder, and train a ranker that combines them with co-occurrence and
-colour.
+A first test with frozen per-product FashionCLIP embeddings, ranked by mean
+similarity, scored below the VAE overall
+([FashionCLIP report](reports/fashion-clip-experiment.md)). Next, train a
+ranker on these embeddings that combines them with co-occurrence and colour.
 
 ## Run it
 
